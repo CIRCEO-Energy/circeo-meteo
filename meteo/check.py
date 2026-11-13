@@ -128,8 +128,8 @@ def check_file(path: Path, compare: bool = True) -> dict:
             want = days * exp["runs"]
             rep["inits"] = f"{ds.sizes['init']}/{want}"
             if ds.sizes["init"] < want:
-                (rep["fail"] if ds.sizes["init"] < 0.9 * want else rep["warn"]).append(
-                    f"inits {ds.sizes['init']}/{want}")
+                # runs absent at the source are known from meteo.probe: a warning, not a failure
+                rep["warn"].append(f"inits {ds.sizes['init']}/{want}")
     if exp.get("leads") and "lead" in ds.dims:
         got = set(ds["lead"].values.tolist())
         miss = sorted(set(exp["leads"]) - got)

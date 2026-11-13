@@ -25,7 +25,7 @@ from urllib3.util.retry import Retry
 
 BASE = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
 SES = requests.Session()
-RETRY = Retry(total=8, backoff_factor=1.0, status_forcelist=(429, 500, 502, 503, 504),
+RETRY = Retry(total=10, backoff_factor=2.0, status_forcelist=(429, 500, 502, 503, 504),
               allowed_methods=("GET", "HEAD"), respect_retry_after_header=True)
 SES.mount("https://", requests.adapters.HTTPAdapter(pool_maxsize=32, max_retries=RETRY))
 LAYOUTS = {  # product -> candidate (model dir, resol, stream, file type)
@@ -51,7 +51,10 @@ def _index(url: str) -> list[dict] | None:
     return [json.loads(ln) for ln in r.text.splitlines() if ln.strip()]
 
 
-def _ranges(entries: list[dict], members: int | None) -> list[tuple[int, int]]:
+def _ranges(entries: list[dict], members: int | None,
+            max_gap: int = 8 << 20) -> list[tuple[int, int]]:
+    """Byte ranges of the wanted fields; ranges closer than ``max_gap`` are merged (fewer
+    requests: S3 throttles many small ranged GETs on the same object)."""
     keep = []
     for e in entries:
         if e.get("param") not in ("10u", "10v"):
@@ -62,7 +65,7 @@ def _ranges(entries: list[dict], members: int | None) -> list[tuple[int, int]]:
     keep.sort()
     merged = []
     for a, b in keep:
-        if merged and a <= merged[-1][1] + 1:
+        if merged and a <= merged[-1][1] + 1 + max_gap:
             merged[-1] = (merged[-1][0], max(b, merged[-1][1]))
         else:
             merged.append((a, b))
@@ -129,7 +132,7 @@ def fetch_run(product: str, day: pd.Timestamp, hh: int, steps: list[int],
             f = Path(td) / f"s{step:03d}.grib2"
             _get(url, _ranges(idx, members), f)
             return step, f
-        with cf.ThreadPoolExecutor(8) as ex:
+        with cf.ThreadPoolExecutor(4 if product == "enfo" else 8) as ex:
             got = [g for g in ex.map(one, steps) if g is not None]
         if not got:
             raise FileNotFoundError("no step available")

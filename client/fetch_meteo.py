@@ -1,6 +1,7 @@
 """Agent-side access to the meteo archive (GitHub Releases of the public circeo-meteo repository).
 
-Usage (inside the router repository's environment; uses the `gh` CLI credentials)::
+Usage (inside the router repository's environment; uses the `gh` CLI credentials and only the
+REST API)::
 
     python fetch_meteo.py --repo <owner>/circeo-meteo --release era5-uv10-0p5-v1 \
         --pattern 'era5_uv10_0p5_201*.nc' --dest data/meteo
@@ -24,6 +25,17 @@ from pathlib import Path
 def gh_json(*args: str):
     out = subprocess.run(["gh", *args], capture_output=True, text=True, check=True).stdout
     return json.loads(out)
+
+
+def download_asset(repo: str, asset: dict, dest: Path) -> None:
+    """REST asset download (``gh release download`` relies on GraphQL, which may be blocked)."""
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    with open(tmp, "wb") as f:
+        subprocess.run(["gh", "api", "-H", "Accept: application/octet-stream",
+                        f"repos/{repo}/releases/assets/{asset['id']}"], stdout=f, check=True)
+    if tmp.stat().st_size != asset["size"]:
+        raise SystemExit(f"incomplete download: {dest.name}")
+    tmp.replace(dest)
 
 
 def sha256(p: Path) -> str:
@@ -54,8 +66,7 @@ def main():
     assets = {x["name"]: x for x in rel["assets"]}
     sums = {}
     for name in [n for n in assets if n.startswith("manifest_")]:
-        subprocess.run(["gh", "release", "download", a.release, "-R", a.repo, "-p", name,
-                        "-D", str(dest), "--clobber"], check=True)
+        download_asset(a.repo, assets[name], dest / name)
         for e in json.loads((dest / name).read_text()):
             sums[e["file"]] = e["sha256"]
     want = [n for n in assets if fnmatch.fnmatch(n, a.pattern) and not n.startswith("manifest_")]
@@ -63,8 +74,7 @@ def main():
         f = dest / name
         if f.exists() and f.stat().st_size == assets[name]["size"]:
             continue
-        subprocess.run(["gh", "release", "download", a.release, "-R", a.repo, "-p", name,
-                        "-D", str(dest), "--clobber"], check=True)
+        download_asset(a.repo, assets[name], f)
         if name in sums and sha256(f) != sums[name]:
             sys.exit(f"checksum mismatch: {name}")
         print(f"ok {name} ({assets[name]['size'] / 2**20:.1f} MiB)")

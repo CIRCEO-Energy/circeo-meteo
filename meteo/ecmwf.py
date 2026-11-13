@@ -58,7 +58,8 @@ def build_wb2_month(year: int, month: int, out: Path, accept: bool) -> list[Path
 
 
 # ------------------------------------------------------------------------------ open data
-def build_open_month(year: int, month: int, out: Path, products=("oper", "aifs", "enfo"),
+def build_open_month(year: int, month: int, out: Path,
+                     products=("oper", "aifs", "enfo", "wave"),
                      days: list[int] | None = None) -> list[Path]:
     """Monthly files of ECMWF open data (fast parallel index-based reader, see ecmwf_fetch)."""
     from .ecmwf_fetch import fetch_run
@@ -85,7 +86,8 @@ def build_open_month(year: int, month: int, out: Path, products=("oper", "aifs",
         if parts:
             ds = xr.concat(parts, "init", join="outer")
             tag = f"{year}{month:02d}" if not days else f"{year}{month:02d}_d{days[0]:02d}"
-            files.append(write_nc(ds, out / f"ecmwf_{prod}_uv10_{res_tag(cfg['res'])}_{tag}.nc",
+            fam = "waves" if prod == "wave" else "uv10"
+            files.append(write_nc(ds, out / f"ecmwf_{prod}_{fam}_{res_tag(cfg['res'])}_{tag}.nc",
                                   {"source": "ECMWF open data (AWS mirror)", "licence": lic,
                                    "attribution": ATTR}))
     return files

@@ -32,7 +32,7 @@ jobs:
           ds = "${{ inputs.dataset }}"
           years = json.loads('${{ inputs.years }}')
           months = json.loads('${{ inputs.months }}')
-          inc = [{"year": y} for y in years] if ds == "era5" else \
+          inc = [{"year": y} for y in years] if ds.startswith("era5") else \
                 [{"year": y, "month": m} for y in years for m in months]
           print("matrix=" + json.dumps({"include": inc}))
           EOF

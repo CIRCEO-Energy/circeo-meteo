@@ -23,25 +23,35 @@ from .common import manifest_entry
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("dataset", choices=["era5", "gefs_reforecast", "gefs_oper",
-                                        "ecmwf_hres_wb2", "ecmwf_open"])
+    ap.add_argument("dataset", choices=["era5", "era5_waves", "era5_sst", "gefs_reforecast",
+                                        "gefs_oper", "gfs_wave", "ecmwf_hres_wb2", "ecmwf_open",
+                                        "cmems_phy_reanalysis", "cmems_phy_forecast",
+                                        "cmems_wav_reanalysis"])
     ap.add_argument("--year", type=int, required=True)
     ap.add_argument("--month", type=int)
     ap.add_argument("--months", type=int, nargs="*")
     ap.add_argument("--days", type=int, nargs="*")
-    ap.add_argument("--products", nargs="*", default=["oper", "aifs", "enfo"])
+    ap.add_argument("--products", nargs="*", default=["oper", "aifs", "enfo", "wave"])
     ap.add_argument("--accept-licence", action="store_true")
     ap.add_argument("--out", default="out")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
-    if a.dataset == "era5":
+    if a.dataset.startswith("era5"):
         from .era5 import build_year
-        files = build_year(a.year, out, a.months)
+        files = build_year(a.year, out, a.months, a.dataset)
     elif a.dataset in ("gefs_reforecast", "gefs_oper"):
         from .gefs import build_month
         files = build_month(a.dataset.split("_")[1], a.year, a.month, out, a.days)
+    elif a.dataset == "gfs_wave":
+        from .gfswave import build_month as gw
+        files = gw(a.year, a.month, out, a.days)
+    elif a.dataset.startswith("cmems"):
+        from .cmems import archive_forecast
+        from .cmems import build_month as cm
+        files = archive_forecast(out) if a.dataset == "cmems_phy_forecast" else \
+            cm(a.dataset, a.year, a.month, out)
     elif a.dataset == "ecmwf_hres_wb2":
         from .ecmwf import build_wb2_month
         files = build_wb2_month(a.year, a.month, out, a.accept_licence)

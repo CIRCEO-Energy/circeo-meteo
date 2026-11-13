@@ -1,5 +1,6 @@
-North-Atlantic 10 m wind extracts (box 30-70°N, 65°W-10°E), built by this repository's workflows.
-Variables `u10`/`v10` (m/s, wind towards), int16 × 0.01, NetCDF4/zlib; forecast files have dims
+North-Atlantic extracts (box 20-75°N, 80°W-15°E) of wind, waves, sea-surface temperature and
+surface currents, built by this repository's workflows. NetCDF4, int16-packed (see the variable
+attributes); winds and currents *towards*, wave directions *coming from*; forecast files have dims
 (init, [member,] lead [h], lat, lon). One `manifest_*.json` (sha256) per file.
 
 Sources and licences — attribution required when using or redistributing:
@@ -10,3 +11,4 @@ Sources and licences — attribution required when using or redistributing:
   (https://creativecommons.org/licenses/by/4.0/); values spatially averaged and cropped.
 * NOAA GEFS: data from NOAA/NCEP (NOAA Open Data Dissemination); values regridded and cropped —
   not original NOAA data and not endorsed by NOAA.
+* Copernicus Marine: Generated using E.U. Copernicus Marine Service Information.

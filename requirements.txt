@@ -10,3 +10,4 @@ eccodes>=2.37
 ecmwf-opendata>=0.3
 requests>=2.32
 pyyaml>=6
+copernicusmarine>=2.0

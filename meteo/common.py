@@ -92,15 +92,42 @@ def regrid(ds: xr.Dataset, res: float) -> xr.Dataset:
     return out.transpose(..., "lat", "lon")
 
 
+# Storage variables: name -> (units, long name, scale_factor, add_offset). int16 packing:
+# the representable range is add_offset +/- 327.67 * (scale_factor / 0.01).
+VARS = {
+    "u10": ("m s-1", "10 m eastward wind (towards)", 0.01, 0.0),
+    "v10": ("m s-1", "10 m northward wind (towards)", 0.01, 0.0),
+    "swh": ("m", "significant height of combined wind waves and swell", 0.001, 16.0),
+    "mwd": ("degree", "mean wave direction (coming from, clockwise from north)", 0.01, 180.0),
+    "mwp": ("s", "mean wave period", 0.001, 16.0),
+    "pp1d": ("s", "peak wave period", 0.001, 16.0),
+    "shww": ("m", "significant height of wind waves", 0.001, 16.0),
+    "mdww": ("degree", "mean direction of wind waves (coming from)", 0.01, 180.0),
+    "mpww": ("s", "mean period of wind waves", 0.001, 16.0),
+    "shts": ("m", "significant height of total swell", 0.001, 16.0),
+    "mdts": ("degree", "mean direction of total swell (coming from)", 0.01, 180.0),
+    "mpts": ("s", "mean period of total swell", 0.001, 16.0),
+    "dirpw": ("degree", "peak wave direction (coming from)", 0.01, 180.0),
+    "sst": ("K", "sea surface temperature", 0.001, 290.0),
+    "uo": ("m s-1", "eastward sea water velocity (towards)", 0.0001, 0.0),
+    "vo": ("m s-1", "northward sea water velocity (towards)", 0.0001, 0.0),
+    "thetao": ("degC", "sea water potential temperature (surface layer)", 0.001, 12.0),
+}
+
+
 def write_nc(ds: xr.Dataset, path: Path, attrs: dict) -> Path:
-    """Compact, self-describing NetCDF4 (see module docstring)."""
+    """Compact, self-describing NetCDF4: every known variable of ``ds`` packed as int16."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    ds = ds[["u10", "v10"]]
-    ds.attrs.update({"conventions": "u10/v10 towards, m/s; lon [-180,180); lead in hours",
+    keep = [v for v in VARS if v in ds.data_vars]
+    ds = ds[keep]
+    ds.attrs.update({"conventions": "lon [-180,180); lead in hours; winds and currents "
+                                    "towards, wave directions coming from",
                      "box": json.dumps(BOX), **attrs})
-    ds["u10"].attrs.update(units="m s-1", long_name="10 m eastward wind")
-    ds["v10"].attrs.update(units="m s-1", long_name="10 m northward wind")
-    enc = {v: dict(ENC) for v in ("u10", "v10")}
+    enc = {}
+    for v in keep:
+        units, name, scale, offset = VARS[v]
+        ds[v].attrs.update(units=units, long_name=name)
+        enc[v] = {**ENC, "scale_factor": scale, "add_offset": offset}
     tmp = path.with_suffix(".tmp.nc")
     ds.to_netcdf(tmp, encoding=enc, engine="netcdf4")
     tmp.replace(path)

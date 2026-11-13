@@ -32,7 +32,12 @@ LAYOUTS = {  # product -> candidate (model dir, resol, stream, file type)
     "oper": [("ifs", "0p25", "oper", "fc"), ("", "0p4-beta", "oper", "fc")],
     "aifs": [("aifs-single", "0p25", "oper", "fc"), ("aifs", "0p25", "oper", "fc")],
     "enfo": [("ifs", "0p25", "enfo", "ef"), ("", "0p4-beta", "enfo", "ef")],
+    "wave": [("ifs", "0p25", "wave", "fc"), ("", "0p4-beta", "wave", "fc")],
 }
+WANTED = {"oper": ("u10", "v10"), "aifs": ("u10", "v10"), "enfo": ("u10", "v10"),
+          "wave": ("swh", "mwd", "mwp", "pp1d")}
+PARAMS = {"oper": ("10u", "10v"), "aifs": ("10u", "10v"), "enfo": ("10u", "10v"),
+          "wave": ("swh", "mwd", "mwp", "pp1d")}
 
 
 def _url(day: pd.Timestamp, hh: int, layout, step: int) -> str:
@@ -51,13 +56,13 @@ def _index(url: str) -> list[dict] | None:
     return [json.loads(ln) for ln in r.text.splitlines() if ln.strip()]
 
 
-def _ranges(entries: list[dict], members: int | None,
+def _ranges(entries: list[dict], members: int | None, params=("10u", "10v"),
             max_gap: int = 8 << 20) -> list[tuple[int, int]]:
     """Byte ranges of the wanted fields; ranges closer than ``max_gap`` are merged (fewer
     requests: S3 throttles many small ranged GETs on the same object)."""
     keep = []
     for e in entries:
-        if e.get("param") not in ("10u", "10v"):
+        if e.get("param") not in params:
             continue
         if members is not None and e.get("type") == "pf" and int(e.get("number", 0)) > members:
             continue
@@ -91,13 +96,11 @@ def _read_step(f: Path, product: str) -> xr.Dataset:
         ren = {k: v for k, v in {"10u": "u10", "10v": "v10"}.items() if k in ds.data_vars}
         ds = ds.rename(ren)
         kind = "pf" if "number" in ds.dims else "cf"
-        for v in ("u10", "v10"):
-            if v in ds:
-                found.setdefault(kind, []).append(ds[[v]])
-    found = [xr.merge(v, compat="override") for v in found.values()
-             if {"u10", "v10"} <= set().union(*[set(x.data_vars) for x in v])]
+        for v in [x for x in ds.data_vars if x in WANTED[product]]:
+            found.setdefault(kind, []).append(ds[[v]])
+    found = [xr.merge(v, compat="override") for v in found.values()]
     if not found:
-        raise KeyError(f"no 10u/10v in step file; variables seen: {seen}")
+        raise KeyError(f"no wanted field in step file; variables seen: {seen}")
     out = []
     for ds in found:
         ds = cut_box(standardise(ds), pad=1.0).load()
@@ -109,7 +112,7 @@ def _read_step(f: Path, product: str) -> xr.Dataset:
         else:
             ds = ds.drop_vars("number", errors="ignore")
         out.append(ds.drop_vars([c for c in ("step", "valid_time", "time", "heightAboveGround",
-                                             "surface") if c in ds.coords]))
+                                             "surface", "meanSea") if c in ds.coords]))
     return xr.concat(out, "member") if product == "enfo" and len(out) > 1 else out[0]
 
 
@@ -133,7 +136,7 @@ def fetch_run(product: str, day: pd.Timestamp, hh: int, steps: list[int],
             if idx is None:
                 return None
             f = Path(td) / f"s{step:03d}.grib2"
-            _get(url, _ranges(idx, members), f)
+            _get(url, _ranges(idx, members, PARAMS[product]), f)
             return step, f
         with cf.ThreadPoolExecutor(4 if product == "enfo" else 8) as ex:
             got = [g for g in ex.map(one, steps) if g is not None]

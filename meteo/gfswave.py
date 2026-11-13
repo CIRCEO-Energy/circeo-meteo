@@ -18,11 +18,10 @@ from .common import CFG, cut_box, expand_steps, regrid, res_tag, standardise, wr
 from .gefs import SES, _download
 
 BASE = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
-# idx pattern -> storage name (first swell partition only)
+# idx pattern -> storage name: total sea (height, peak period, peak direction) and first swell
+# partition (height, direction). Kept small: 9 fields x 2 runs would be 66 MB per day.
 WANTED = {":HTSGW:surface:": "swh", ":PERPW:surface:": "pp1d", ":DIRPW:surface:": "dirpw",
-          ":WVHGT:surface:": "shww", ":WVDIR:surface:": "mdww", ":WVPER:surface:": "mpww",
-          ":SWELL:1 in sequence:": "shts", ":SWDIR:1 in sequence:": "mdts",
-          ":SWPER:1 in sequence:": "mpts"}
+          ":SWELL:1 in sequence:": "shts", ":SWDIR:1 in sequence:": "mdts"}
 
 
 def _one(day: pd.Timestamp, hh: int, step: int, tmp: Path) -> xr.Dataset | None:

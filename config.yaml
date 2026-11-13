@@ -52,11 +52,11 @@ datasets:
     res: 1.0
     release: gefs-oper-uv10-1p0-v2
   gfs_wave:
-    title: NOAA GFS-Wave (WAVEWATCH III, GFSv16+), global 0.25 deg, 00/12 UTC
+    title: NOAA GFS-Wave (WAVEWATCH III, GFSv16+), global 0.25 deg, 00 UTC, native steps
     source: s3://noaa-gfs-bdp-pds (gfs.<date>/<HH>/wave/gridded/gfswave.t<HH>z.global.0p25.f<FFF>.grib2)
     licence: NOAA open data
-    years: [2021, 2025]
-    runs: [0, 12]
+    years: [2021, 2025]      # archive starts 2021-03-22 (GFSv16)
+    runs: [0]
     steps: [[0, 120, 3], [126, 240, 6]]
     res: 0.25
     release: gfs-wave-0p25-v2

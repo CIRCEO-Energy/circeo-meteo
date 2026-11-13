@@ -1,0 +1,66 @@
+# Builds one dataset for a range of years (and months), in parallel, and uploads every file as an
+# asset of the dataset's Release in THIS public repository (GITHUB_TOKEN, no personal token).
+# Trigger: Actions tab > "build" > Run workflow (or `gh workflow run build.yml -f ...`).
+name: build
+on:
+  workflow_dispatch:
+    inputs:
+      dataset:
+        description: era5 | gefs_reforecast | gefs_oper | ecmwf_hres_wb2 | ecmwf_open
+        required: true
+      years:
+        description: 'JSON list of years, e.g. [2015] or [2000,2001,2002]'
+        required: true
+      months:
+        description: 'JSON list of months for monthly datasets (ignored by era5), e.g. [1,2,3,4,5,6,7,8,9,10,11,12]'
+        default: '[1,2,3,4,5,6,7,8,9,10,11,12]'
+      extra:
+        description: 'extra CLI args (e.g. "--months 1" for an ERA5 smoke test, "--accept-licence", "--days 1")'
+        default: ''
+permissions:
+  contents: write
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json, os
+          ds = "${{ inputs.dataset }}"
+          years = json.loads('${{ inputs.years }}')
+          months = json.loads('${{ inputs.months }}')
+          inc = [{"year": y} for y in years] if ds == "era5" else \
+                [{"year": y, "month": m} for y in years for m in months]
+          print("matrix=" + json.dumps({"include": inc}))
+          EOF
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12', cache: pip}
+      - run: pip install -r requirements.txt
+      - name: build
+        run: |
+          ARGS="--year ${{ matrix.year }}"
+          if [ -n "${{ matrix.month }}" ]; then ARGS="$ARGS --month ${{ matrix.month }}"; fi
+          python -m meteo.build ${{ inputs.dataset }} $ARGS ${{ inputs.extra }} --out out
+      - name: upload to the private data repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DATA_REPO: ${{ github.repository }}
+        run: |
+          TAG=$(python3 -c "import yaml;print(yaml.safe_load(open('config.yaml'))['datasets']['${{ inputs.dataset }}']['release'])")
+          gh release view "$TAG" -R "$DATA_REPO" >/dev/null 2>&1 || \
+            gh release create "$TAG" -R "$DATA_REPO" --title "$TAG" \
+              --notes-file docs/release_notes.md || true
+          gh release upload "$TAG" out/* -R "$DATA_REPO" --clobber

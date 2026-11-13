@@ -1,0 +1,54 @@
+# Study box and dataset definitions (single source of truth for every script).
+# Box: North Atlantic from the Azores latitude to south of Iceland, from the Grand Banks to
+# western Europe (S5: the best cells sat on the old 32W edge -> extended west to 65W, north to 70N).
+box:
+  lat_min: 30.0
+  lat_max: 70.0
+  lon_min: -65.0
+  lon_max: 10.0
+
+datasets:
+  era5:
+    title: ERA5 hourly 10 m wind (reanalysis, "truth")
+    source: gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3
+    licence: Copernicus licence (free, commercial use allowed, attribution)
+    years: [1995, 2025]
+    res: 0.5
+    release: era5-uv10-0p5-v1
+  gefs_reforecast:
+    title: NOAA GEFSv12 reforecast (frozen model, 00 UTC, control + 4 members, days 1-10)
+    source: s3://noaa-gefs-retrospective/GEFSv12/reforecast
+    licence: NOAA open data (no restriction, attribution requested)
+    years: [2000, 2019]
+    members: [c00, p01, p02, p03, p04]
+    leads_h: [0, 240, 6]
+    res: 1.0
+    release: gefsv12-reforecast-uv10-1p0-v1
+  gefs_oper:
+    title: NOAA GEFS operational (v12 since 2020-09-23), 00 UTC
+    source: s3://noaa-gefs-pds
+    licence: NOAA open data
+    years: [2021, 2025]
+    members: 10          # perturbed members kept in addition to the control
+    leads_h: [0, 240, 6]
+    res: 1.0
+    release: gefs-oper-uv10-1p0-v1
+  ecmwf_hres_wb2:
+    title: ECMWF IFS HRES 2016-2022 (WeatherBench 2 copy of the ECMWF archive), 00/12 UTC
+    source: gs://weatherbench2/datasets/hres/2016-2022-0012-1440x721.zarr
+    licence: CHECK the LICENSE file printed by the script (TIGGE-derived WB2 datasets are
+      research-only; HRES comes from the ECMWF archive, CC-BY-4.0 for historical data)
+    years: [2016, 2022]
+    leads_h: [0, 240, 6]
+    res: 0.5
+    release: ecmwf-hres-wb2-uv10-0p5-v1
+  ecmwf_open:
+    title: ECMWF open data (IFS HRES/oper, IFS ENS, AIFS single), 00/12 UTC
+    source: ecmwf-opendata client, source=aws (s3://ecmwf-forecasts)
+    licence: CC-BY-4.0 (ECMWF open data)
+    start: "2024-04-01"   # the AWS mirror is complete from about this date; script probes earlier
+    leads_h: [0, 240, 6]
+    ens_members: 20
+    res_oper: 0.5
+    res_ens: 1.0
+    release: ecmwf-open-uv10-v1

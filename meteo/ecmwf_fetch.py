@@ -85,16 +85,19 @@ def _read_step(f: Path, product: str) -> xr.Dataset:
     import cfgrib
 
     from .common import cut_box, standardise
-    found = []
+    found, seen = {}, []
     for ds in cfgrib.open_datasets(str(f), backend_kwargs={"indexpath": ""}):
-        names = {v for v in ds.data_vars}
-        ren = {k: v for k, v in {"10u": "u10", "10v": "v10", "u": "u10", "v": "v10"}.items()
-               if k in names}
+        seen.append(sorted(ds.data_vars))
+        ren = {k: v for k, v in {"10u": "u10", "10v": "v10"}.items() if k in ds.data_vars}
         ds = ds.rename(ren)
-        if "u10" in ds and "v10" in ds:
-            found.append(ds[["u10", "v10"]])
+        kind = "pf" if "number" in ds.dims else "cf"
+        for v in ("u10", "v10"):
+            if v in ds:
+                found.setdefault(kind, []).append(ds[[v]])
+    found = [xr.merge(v, compat="override") for v in found.values()
+             if {"u10", "v10"} <= set().union(*[set(x.data_vars) for x in v])]
     if not found:
-        raise KeyError("no 10u/10v in step file")
+        raise KeyError(f"no 10u/10v in step file; variables seen: {seen}")
     out = []
     for ds in found:
         ds = cut_box(standardise(ds), pad=1.0).load()

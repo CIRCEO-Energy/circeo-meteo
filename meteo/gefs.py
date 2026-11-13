@@ -19,6 +19,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import requests
+from urllib3.util.retry import Retry
 import xarray as xr
 
 from .common import CFG, regrid, standardise, write_nc
@@ -26,7 +27,9 @@ from .common import CFG, regrid, standardise, write_nc
 S3R = "https://noaa-gefs-retrospective.s3.amazonaws.com"
 S3O = "https://noaa-gefs-pds.s3.amazonaws.com"
 SES = requests.Session()
-SES.mount("https://", requests.adapters.HTTPAdapter(pool_maxsize=64, max_retries=5))
+RETRY = Retry(total=8, backoff_factor=1.0, status_forcelist=(429, 500, 502, 503, 504),
+              allowed_methods=("GET", "HEAD"), respect_retry_after_header=True)
+SES.mount("https://", requests.adapters.HTTPAdapter(pool_maxsize=32, max_retries=RETRY))
 
 
 def _list(bucket_url: str, prefix: str) -> list[str]:

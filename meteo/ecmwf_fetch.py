@@ -20,11 +20,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import requests
+from urllib3.util.retry import Retry
 import xarray as xr
 
 BASE = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
 SES = requests.Session()
-SES.mount("https://", requests.adapters.HTTPAdapter(pool_maxsize=64, max_retries=4))
+RETRY = Retry(total=8, backoff_factor=1.0, status_forcelist=(429, 500, 502, 503, 504),
+              allowed_methods=("GET", "HEAD"), respect_retry_after_header=True)
+SES.mount("https://", requests.adapters.HTTPAdapter(pool_maxsize=32, max_retries=RETRY))
 LAYOUTS = {  # product -> candidate (model dir, resol, stream, file type)
     "oper": [("ifs", "0p25", "oper", "fc"), ("", "0p4-beta", "oper", "fc")],
     "aifs": [("aifs-single", "0p25", "oper", "fc"), ("aifs", "0p25", "oper", "fc")],
@@ -42,8 +45,9 @@ def _url(day: pd.Timestamp, hh: int, layout, step: int) -> str:
 
 def _index(url: str) -> list[dict] | None:
     r = SES.get(url[:-6] + ".index", timeout=60)
-    if r.status_code != 200:
+    if r.status_code in (403, 404):
         return None
+    r.raise_for_status()
     return [json.loads(ln) for ln in r.text.splitlines() if ln.strip()]
 
 
@@ -95,7 +99,7 @@ def fetch_run(product: str, day: pd.Timestamp, hh: int, steps: list[int],
             f = Path(td) / f"s{step:03d}.grib2"
             _get(url, _ranges(idx, members), f)
             return step, f
-        with cf.ThreadPoolExecutor(24) as ex:
+        with cf.ThreadPoolExecutor(8) as ex:
             got = [g for g in ex.map(one, steps) if g is not None]
         if not got:
             raise FileNotFoundError("no step available")

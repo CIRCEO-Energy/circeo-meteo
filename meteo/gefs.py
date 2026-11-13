@@ -19,8 +19,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import requests
-from urllib3.util.retry import Retry
 import xarray as xr
+from urllib3.util.retry import Retry
 
 from .common import CFG, regrid, standardise, write_nc
 

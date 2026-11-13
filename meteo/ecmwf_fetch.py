@@ -20,8 +20,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import requests
-from urllib3.util.retry import Retry
 import xarray as xr
+from urllib3.util.retry import Retry
 
 BASE = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
 SES = requests.Session()
@@ -77,6 +77,36 @@ def _get(url: str, ranges, dest: Path) -> None:
             f.write(r.content)
 
 
+def _read_step(f: Path, product: str) -> xr.Dataset:
+    """u10/v10 of one step file, cropped to the study box at once (bounded memory)."""
+    import cfgrib
+
+    from .common import cut_box, standardise
+    found = []
+    for ds in cfgrib.open_datasets(str(f), backend_kwargs={"indexpath": ""}):
+        names = {v for v in ds.data_vars}
+        ren = {k: v for k, v in {"10u": "u10", "10v": "v10", "u": "u10", "v": "v10"}.items()
+               if k in names}
+        ds = ds.rename(ren)
+        if "u10" in ds and "v10" in ds:
+            found.append(ds[["u10", "v10"]])
+    if not found:
+        raise KeyError("no 10u/10v in step file")
+    out = []
+    for ds in found:
+        ds = cut_box(standardise(ds), pad=1.0).load()
+        if product == "enfo":
+            if "number" in ds.dims:
+                ds = ds.rename(number="member")
+            else:
+                ds = ds.drop_vars("number", errors="ignore").expand_dims(member=[0])
+        else:
+            ds = ds.drop_vars("number", errors="ignore")
+        out.append(ds.drop_vars([c for c in ("step", "valid_time", "time", "heightAboveGround",
+                                             "surface") if c in ds.coords]))
+    return xr.concat(out, "member") if product == "enfo" and len(out) > 1 else out[0]
+
+
 def find_layout(product: str, day: pd.Timestamp, hh: int):
     for lay in LAYOUTS[product]:
         if _index(_url(day, hh, lay, 0)) is not None:
@@ -105,18 +135,6 @@ def fetch_run(product: str, day: pd.Timestamp, hh: int, steps: list[int],
             raise FileNotFoundError("no step available")
         parts = []
         for step, f in sorted(got):
-            if product == "enfo":
-                cfd = xr.open_dataset(f, engine="cfgrib", backend_kwargs={
-                    "indexpath": "", "filter_by_keys": {"dataType": "cf"}}).load()
-                pfd = xr.open_dataset(f, engine="cfgrib", backend_kwargs={
-                    "indexpath": "", "filter_by_keys": {"dataType": "pf"}}).load()
-                cfd = cfd.drop_vars("number", errors="ignore").expand_dims(member=[0])
-                pfd = pfd.rename(number="member")
-                ds = xr.concat([cfd[["u10", "v10"]], pfd[["u10", "v10"]]], "member")
-            else:
-                ds = xr.open_dataset(f, engine="cfgrib", backend_kwargs={"indexpath": ""}).load()
-                ds = ds[["u10", "v10"]]
-            ds = ds.drop_vars([c for c in ("step", "valid_time", "time", "heightAboveGround",
-                                           "surface", "number") if c in ds.coords])
-            parts.append(ds.expand_dims(lead=[np.int16(step)]))
+            parts.append(_read_step(f, product).expand_dims(lead=[np.int16(step)]))
+            f.unlink()
     return xr.concat(parts, "lead")

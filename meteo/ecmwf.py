@@ -77,7 +77,7 @@ def build_open_month(year: int, month: int, out: Path, products=("oper", "aifs",
                     ds = fetch_run(prod, d, hh, steps,
                                    D["ens_members"] if prod == "enfo" else None)
                     res = D["res_ens"] if prod == "enfo" else D["res_oper"]
-                    ds = regrid(standardise(ds), res).astype("float32")
+                    ds = regrid(ds, res).astype("float32")  # already standardised/cropped
                     parts.append(ds.expand_dims(
                         init=[np.datetime64(d + pd.Timedelta(hours=hh), "ns")]))
                     print(f"ecmwf {prod} {d:%Y-%m-%d} {hh:02d}z ok", flush=True)

@@ -44,7 +44,7 @@ datasets:
     licence: NOAA open data (no restriction, attribution requested)
     years: [2000, 2019]
     members: all
-    leads_h: [[0, 240, 3]]
+    leads_h: [[3, 240, 3]]    # the reforecast files start at +3 h (no analysis step)
     res: 0.5
     file: monthly
     release: gefsv12-reforecast-uv10-0p5-v2

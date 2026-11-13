@@ -72,22 +72,28 @@ def build_open_month(year: int, month: int, out: Path,
     for prod in products:
         cfg = P[prod]
         steps = expand_steps(cfg["steps"])
+        fam = "waves" if prod == "wave" else "uv10"
+        stem = f"ecmwf_{prod}_{fam}_{res_tag(cfg['res'])}"
+        attrs = {"source": "ECMWF open data (AWS mirror)", "licence": lic, "attribution": ATTR}
         parts = []
         for d in dates:
+            day_parts = []
             for hh in cfg["runs"]:
                 try:
                     ds = fetch_run(prod, d, hh, steps, cfg.get("members"))
                     ds = regrid(ds, cfg["res"]).astype("float32")  # already cropped
-                    parts.append(ds.expand_dims(
+                    day_parts.append(ds.expand_dims(
                         init=[np.datetime64(d + pd.Timedelta(hours=hh), "ns")]))
                     print(f"ecmwf {prod} {d:%Y-%m-%d} {hh:02d}z ok", flush=True)
                 except Exception as exc:  # noqa: BLE001 - keep the rest of the month
                     print(f"ecmwf {prod} {d:%Y-%m-%d} {hh:02d}z MISSING: {exc!r}", flush=True)
+            if day_parts and cfg.get("file") == "daily":
+                files.append(write_nc(xr.concat(day_parts, "init"),
+                                      out / f"{stem}_{d:%Y%m%d}.nc", attrs))
+            else:
+                parts += day_parts
         if parts:
             ds = xr.concat(parts, "init", join="outer")
             tag = f"{year}{month:02d}" if not days else f"{year}{month:02d}_d{days[0]:02d}"
-            fam = "waves" if prod == "wave" else "uv10"
-            files.append(write_nc(ds, out / f"ecmwf_{prod}_{fam}_{res_tag(cfg['res'])}_{tag}.nc",
-                                  {"source": "ECMWF open data (AWS mirror)", "licence": lic,
-                                   "attribution": ATTR}))
+            files.append(write_nc(ds, out / f"{stem}_{tag}.nc", attrs))
     return files

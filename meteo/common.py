@@ -66,6 +66,9 @@ def target_grid(res: float) -> tuple[np.ndarray, np.ndarray]:
     return lat, lon
 
 
+DIRECTIONS = {"mwd", "mdww", "mdts", "dirpw"}
+
+
 def regrid(ds: xr.Dataset, res: float) -> xr.Dataset:
     """Box-average to a regular ``res``-degree grid aligned on the box corners.
 
@@ -75,6 +78,11 @@ def regrid(ds: xr.Dataset, res: float) -> xr.Dataset:
     """
     lat, lon = target_grid(res)
     src = float(abs(ds["lat"].diff("lat").median()))
+    if src < res - 1e-6 and set(ds.data_vars) & DIRECTIONS:
+        # directions cannot be averaged arithmetically: pick the coarse grid points instead
+        out = ds.sel(lat=lat, lon=lon, method="nearest")
+        out = out.assign_coords(lat=lat.astype("float32"), lon=lon.astype("float32"))
+        return out.transpose(..., "lat", "lon")
     if src < res - 1e-6:
         half = res / 2
         ds = cut_box(ds, pad=half)
@@ -144,3 +152,30 @@ def sha256(path: Path) -> str:
 
 def manifest_entry(path: Path, **meta) -> dict:
     return {"file": path.name, "bytes": path.stat().st_size, "sha256": sha256(path), **meta}
+
+
+def release_for(path: Path) -> str:
+    """Release tag of an output file, from config.yaml (``{year}`` filled from the file name)."""
+    import re
+    name = Path(path).name
+    if name.startswith("manifest_"):
+        name = name[len("manifest_"):].rsplit(".", 1)[0] + ".nc"
+    stems = {}
+    for key, d in CFG["datasets"].items():
+        if key == "ecmwf_open":
+            for p, c in d["products"].items():
+                fam = "waves" if p == "wave" else "uv10"
+                stems[f"ecmwf_{p}_{fam}_{res_tag(c['res'])}_"] = c["release"]
+        elif "release" in d:
+            stems[key + "_"] = d["release"]
+            if key.startswith("gefs_"):
+                stems[f"{key}_uv10_{res_tag(d['res'])}_"] = d["release"]
+    stems.update({"era5_uv10_": CFG["datasets"]["era5"]["release"],
+                  "era5_waves_": CFG["datasets"]["era5_waves"]["release"],
+                  "era5_sst_": CFG["datasets"]["era5_sst"]["release"],
+                  "gfs_wave_": CFG["datasets"]["gfs_wave"]["release"]})
+    stem = max((k for k in stems if name.startswith(k)), key=len, default=None)
+    if stem is None:
+        raise KeyError(f"no release for {name}")
+    year = re.search(r"_(\d{4})", name[len(stem) - 1:])
+    return stems[stem].format(year=year.group(1) if year else "")

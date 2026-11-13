@@ -9,8 +9,9 @@
 * ``cmems_wav_reanalysis``: WAVERYS (0.2 deg, 3-hourly), better than ERA5 waves according to
   Mercator Ocean (current forcing, wave-spectra assimilation).
 
+Native 1/12 deg fields are box-averaged to 0.25 deg (``res`` in config.yaml).
 Credentials: GitHub secrets COPERNICUSMARINE_SERVICE_USERNAME / COPERNICUSMARINE_SERVICE_PASSWORD
-(read by the ``copernicusmarine`` toolbox from the environment). Native resolution is kept.
+(read by the ``copernicusmarine`` toolbox from the environment).
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from .common import BOX, CFG, write_nc
+from .common import BOX, CFG, regrid, write_nc
 
 ATTR = "E.U. Copernicus Marine Service Information"
 
@@ -57,6 +58,8 @@ def build_month(dataset: str, year: int, month: int, out: Path) -> list[Path]:
     else:
         raise RuntimeError(f"no data for {year}-{month:02d}: {last!r}")
     ds = ds.rename(D["vars"]).astype("float32")
+    if D.get("res"):
+        ds = regrid(ds.sortby("lat").sortby("lon"), D["res"])
     name = f"{dataset}_{year}{month:02d}.nc"
     print(f"{dataset} {year}-{month:02d}: {dict(ds.sizes)} from {did}", flush=True)
     return [write_nc(ds, out / name, {"source": did, "licence": D["licence"],
@@ -69,6 +72,8 @@ def archive_forecast(out: Path, day: pd.Timestamp | None = None) -> list[Path]:
     day = (day or pd.Timestamp.utcnow().tz_localize(None)).normalize()
     ds = _subset(D["dataset_id"], list(D["vars"]), day, day + pd.Timedelta(days=10)).load()
     ds = ds.rename(D["vars"]).astype("float32")
+    if D.get("res"):
+        ds = regrid(ds.sortby("lat").sortby("lon"), D["res"])
     lead = ((ds["time"].values - np.datetime64(day, "ns")) / np.timedelta64(1, "h"))
     ds = ds.assign_coords(lead=("time", lead.astype("int16"))).swap_dims(time="lead")
     ds = ds.drop_vars("time").expand_dims(init=[np.datetime64(day, "ns")])

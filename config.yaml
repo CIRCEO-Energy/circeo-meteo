@@ -33,47 +33,66 @@ datasets:
     res: 0.25
     vars: [sst]
     release: era5-sst-0p25-v2
+# --------------------------------------------------------------------------------- forecasts
+# Published in boris-circeo/circeo-meteo-forecasts. Wind: deterministic runs and ensemble controls
+# at native resolution (0.25 deg) and native output steps; full ensembles (all members, native
+# steps) archived at 0.5 deg, their full-resolution statistics computed on the runners (verify).
+# "file: daily" products are written one file per day into one Release per year ({year}).
   gefs_reforecast:
-    title: NOAA GEFSv12 reforecast (frozen model, 00 UTC, control + 4 members, days 1-10)
+    title: NOAA GEFSv12 reforecast (frozen model), 00 UTC, all members (5, 11 on Wednesdays), days 1-10
     source: s3://noaa-gefs-retrospective/GEFSv12/reforecast
     licence: NOAA open data (no restriction, attribution requested)
     years: [2000, 2019]
-    members: [c00, p01, p02, p03, p04]
-    leads_h: [0, 240, 6]
-    res: 1.0
-    release: gefsv12-reforecast-uv10-1p0-v2
+    members: all
+    leads_h: [[0, 240, 3]]
+    res: 0.5
+    file: monthly
+    release: gefsv12-reforecast-uv10-0p5-v2
   gefs_oper:
-    title: NOAA GEFS operational (v12 since 2020-09-23), 00 UTC
-    source: s3://noaa-gefs-pds
+    title: NOAA GEFS operational ensemble (v12 since 2020-09-23), 00 UTC, control + 30 members
+    source: s3://noaa-gefs-pds (atmos/pgrb2ap5)
     licence: NOAA open data
     years: [2021, 2025]
-    members: 10          # perturbed members kept in addition to the control
-    leads_h: [0, 240, 6]
-    res: 1.0
-    release: gefs-oper-uv10-1p0-v2
+    members: 30
+    leads_h: [[0, 240, 3], [246, 384, 6]]
+    res: 0.5
+    file: daily
+    release: gefs-oper-uv10-0p5-{year}
+  gefs_ctl:
+    title: NOAA GEFS operational control member at native 0.25 deg (atmos/pgrb2sp25), 00 UTC
+    source: s3://noaa-gefs-pds (atmos/pgrb2sp25)
+    licence: NOAA open data
+    years: [2021, 2025]
+    leads_h: [[0, 240, 3]]
+    res: 0.25
+    file: monthly
+    release: gefs-ctl-uv10-0p25-v2
   gfs_wave:
-    title: NOAA GFS-Wave (WAVEWATCH III, GFSv16+), global 0.25 deg, 00 UTC, native steps
+    title: NOAA GFS-Wave (WAVEWATCH III, GFSv16+), 00 UTC, native steps, stored at 0.5 deg
     source: s3://noaa-gfs-bdp-pds (gfs.<date>/<HH>/wave/gridded/gfswave.t<HH>z.global.0p25.f<FFF>.grib2)
     licence: NOAA open data
     years: [2021, 2025]      # archive starts 2021-03-22 (GFSv16)
     runs: [0]
     steps: [[0, 120, 3], [126, 240, 6]]
-    res: 0.25
-    release: gfs-wave-0p25-v2
+    res: 0.5
+    file: monthly
+    release: gfs-wave-0p5-v2
   cmems_phy_reanalysis:
-    title: Copernicus Marine GLORYS12 reanalysis (GLOBAL_MULTIYEAR_PHY_001_030), daily, 1/12 deg
+    title: Copernicus Marine GLORYS12 reanalysis (GLOBAL_MULTIYEAR_PHY_001_030), daily, stored at 0.25 deg
     dataset_id: cmems_mod_glo_phy_my_0.083deg_P1D-m
     interim_id: cmems_mod_glo_phy_myint_0.083deg_P1D-m
     vars: {uo: uo, vo: vo, thetao: thetao}
     depth: [0.0, 1.0]        # surface layer (0.49 m)
+    res: 0.25
     licence: Copernicus Marine Service licence (free, commercial use allowed, attribution)
     years: [1995, 2025]
     release: cmems-glorys12-surface-v2
   cmems_phy_forecast:
-    title: Copernicus Marine global analysis & forecast (GLOBAL_ANALYSISFORECAST_PHY_001_024), hourly surface
+    title: Copernicus Marine global analysis & forecast (GLOBAL_ANALYSISFORECAST_PHY_001_024), hourly surface, stored at 0.25 deg
     dataset_id: cmems_mod_glo_phy_anfc_0.083deg_PT1H-m
     vars: {uo: uo, vo: vo, thetao: thetao}
     licence: Copernicus Marine Service licence (free, commercial use allowed, attribution)
+    res: 0.25
     release: cmems-phy-anfc-hourly-v2
   cmems_wav_reanalysis:
     title: Copernicus Marine WAVERYS wave reanalysis (GLOBAL_MULTIYEAR_WAV_001_032), 3-hourly, 0.2 deg
@@ -92,14 +111,15 @@ datasets:
     res: 0.5
     release: ecmwf-hres-wb2-uv10-0p5-v2
   ecmwf_open:
-    title: ECMWF open data (IFS HRES/oper, IFS ENS, AIFS single)
+    title: ECMWF open data (IFS HRES/oper, IFS ENS, AIFS single, WAM waves)
     source: AWS mirror s3://ecmwf-forecasts (read with meteo/ecmwf_fetch.py)
     licence: CC-BY-4.0 (ECMWF open data)
-    # deterministic products at native resolution and native output steps; the ensemble is
-    # thinned (1 deg, control + 20 members, 6-hourly) to stay at ~6 GB per year
     products:
-      oper: {res: 0.25, runs: [0, 12], steps: [[0, 144, 3], [150, 240, 6]]}
-      aifs: {res: 0.25, runs: [0, 12], steps: [[0, 360, 6]]}
-      enfo: {res: 1.0, runs: [0], members: 20, steps: [[0, 360, 6]]}
-      wave: {res: 0.25, runs: [0, 12], steps: [[0, 144, 3], [150, 240, 6]]}   # ECMWF WAM (HRES)
-    release: ecmwf-open-v2
+      oper: {res: 0.25, runs: [0, 12], steps: [[0, 144, 3], [150, 240, 6]], file: monthly,
+             release: ecmwf-oper-uv10-0p25-v2}
+      aifs: {res: 0.25, runs: [0, 12], steps: [[0, 360, 6]], file: monthly,
+             release: ecmwf-aifs-uv10-0p25-v2}
+      enfo: {res: 0.5, runs: [0], members: 50, steps: [[0, 144, 3], [150, 360, 6]],
+             file: daily, release: "ecmwf-enfo-uv10-0p5-{year}"}
+      wave: {res: 0.5, runs: [0, 12], steps: [[0, 144, 3], [150, 240, 6]], file: monthly,
+             release: ecmwf-wave-0p5-v2}

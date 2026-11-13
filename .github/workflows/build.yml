@@ -1,12 +1,14 @@
-# Builds one dataset for a range of years (and months), in parallel, and uploads every file as an
-# asset of the dataset's Release in THIS public repository (GITHUB_TOKEN, no personal token).
+# TRUTH datasets (reanalyses: era5, era5_waves, era5_sst, cmems_phy_reanalysis,
+# cmems_wav_reanalysis): builds a range of years in parallel and uploads every file to the
+# dataset's Release in THIS repository (GITHUB_TOKEN). Forecasts are built by
+# boris-circeo/circeo-meteo-forecasts, which runs this repository's code.
 # Trigger: Actions tab > "build" > Run workflow (or `gh workflow run build.yml -f ...`).
 name: build
 on:
   workflow_dispatch:
     inputs:
       dataset:
-        description: era5 | gefs_reforecast | gefs_oper | ecmwf_hres_wb2 | ecmwf_open
+        description: era5 | era5_waves | era5_sst | cmems_phy_reanalysis | cmems_wav_reanalysis
         required: true
       years:
         description: 'JSON list of years, e.g. [2015] or [2000,2001,2002]'
@@ -50,6 +52,9 @@ jobs:
         with: {python-version: '3.12', cache: pip}
       - run: pip install -r requirements.txt
       - name: build
+        env:
+          COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+          COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
         run: |
           ARGS="--year ${{ matrix.year }}"
           if [ -n "${{ matrix.month }}" ]; then ARGS="$ARGS --month ${{ matrix.month }}"; fi
@@ -57,10 +62,4 @@ jobs:
       - name: upload to this repository's Releases
         env:
           GH_TOKEN: ${{ github.token }}
-          DATA_REPO: ${{ github.repository }}
-        run: |
-          TAG=$(python3 -c "import yaml;print(yaml.safe_load(open('config.yaml'))['datasets']['${{ inputs.dataset }}']['release'])")
-          gh release view "$TAG" -R "$DATA_REPO" >/dev/null 2>&1 || \
-            gh release create "$TAG" -R "$DATA_REPO" --title "$TAG" \
-              --notes-file docs/release_notes.md || true
-          gh release upload "$TAG" out/* -R "$DATA_REPO" --clobber
+        run: python -m meteo.publish --repo ${{ github.repository }} out/*

@@ -24,7 +24,7 @@ from .common import manifest_entry
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dataset", choices=["era5", "era5_waves", "era5_sst", "gefs_reforecast",
-                                        "gefs_oper", "gfs_wave", "ecmwf_hres_wb2", "ecmwf_open",
+                                        "gefs_oper", "gefs_ctl", "gfs_wave", "ecmwf_hres_wb2", "ecmwf_open",
                                         "cmems_phy_reanalysis", "cmems_phy_forecast",
                                         "cmems_wav_reanalysis"])
     ap.add_argument("--year", type=int, required=True)
@@ -41,7 +41,7 @@ def main():
     if a.dataset.startswith("era5"):
         from .era5 import build_year
         files = build_year(a.year, out, a.months, a.dataset)
-    elif a.dataset in ("gefs_reforecast", "gefs_oper"):
+    elif a.dataset in ("gefs_reforecast", "gefs_oper", "gefs_ctl"):
         from .gefs import build_month
         files = build_month(a.dataset.split("_")[1], a.year, a.month, out, a.days)
     elif a.dataset == "gfs_wave":
@@ -58,9 +58,9 @@ def main():
     else:
         from .ecmwf import build_open_month
         files = build_open_month(a.year, a.month, out, tuple(a.products), a.days)
-    tag = f"{a.year}" + (f"{a.month:02d}" if a.month else "")
-    man = out / f"manifest_{a.dataset}_{tag}.json"
-    man.write_text(json.dumps([manifest_entry(f, dataset=a.dataset) for f in files], indent=1))
+    for f in files:  # one manifest per data file (same Release as the file)
+        (out / f"manifest_{f.stem}.json").write_text(
+            json.dumps([manifest_entry(f, dataset=a.dataset)], indent=1))
     print(f"{len(files)} file(s), {sum(f.stat().st_size for f in files) / 2**20:.1f} MiB, "
           f"{(time.time() - t0) / 60:.1f} min")
     if not files:

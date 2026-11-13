@@ -4,17 +4,27 @@
 
 ## 1. Ce qu'il faut et pourquoi
 
-| Besoin S6 | Donnée | Durée retenue | Pourquoi cette durée |
+**Domaine (généreux)** : **20°N-75°N, 80°O-15°E** — de la latitude des Antilles et du Cap-Vert au détroit de Danemark, de la côte Est américaine à la mer du Nord. Modifiable en un seul endroit (`config.yaml`).
+
+**Résolution** : la résolution native de chaque source, spatiale et temporelle, sauf pour les ensembles (volume).
+
+| Famille | Source | Période | Résolution stockée |
 |---|---|---|---|
-| Structures, variabilité, climatologie, valeurs terminales hors ligne | **ERA5** horaire, vent à 10 m | **30 ans (1995-2025)**, 20 ans au minimum | Une normale climatique fait 30 ans ; la variabilité interannuelle (NAO, blocages) demande 20 à 30 hivers indépendants ; ERA5 est homogène sur l'océan depuis l'ère satellitaire. Au-delà de 30 ans, le gain est faible et la tendance climatique devient un biais. |
-| Qualité des prévisions, « modèle figé » | **GEFSv12 reforecast** (NOAA) | **20 ans (2000-2019)**, toute la série | Le même modèle sur 20 ans : les statistiques d'erreur (niveau, structure intensité/position, dépendance au régime et à la saison) sont propres, sans mélange de versions. |
-| Qualité des prévisions actuelles, 1re source | **ECMWF IFS HRES** + **IFS ENS** + **AIFS** | **~10 ans (2016-2025)** pour HRES ; 2024-2025 pour ENS et AIFS | Le niveau absolu d'erreur évolue avec le modèle (environ +1 jour de prévisibilité par décennie) : les années récentes comptent plus que les anciennes. |
-| Qualité des prévisions actuelles, 2e source | **GEFS opérationnel** (NOAA) | **5 ans (2021-2025)** | Même famille que le reforecast, version opérationnelle actuelle (v12 depuis septembre 2020) : permet de croiser avec ECMWF sur les mêmes dates. |
-| Archive continue à partir d'aujourd'hui | ECMWF open data + GEFS | en continu | Le portail ECMWF ne garde que quelques jours ; on archive soi-même chaque jour. |
+| Vent 10 m, réanalyse (« vérité ») | ERA5 | **1995-2025 (31 ans)** | 0,25°, horaire (natif) |
+| Vagues, réanalyse | ERA5 (modèle WAM) | 1995-2025 | 0,5° (grille native des vagues), horaire ; Hs, direction, périodes, mer du vent, houle |
+| Température de surface, réanalyse | ERA5 | 1995-2025 | 0,25°, moyenne journalière |
+| Courants + température, réanalyse | Copernicus Marine GLORYS12 | 1995-2025 | 1/12° (≈ 8 km), journalier |
+| Vagues, réanalyse (option) | Copernicus Marine WAVERYS | 1995-2025 | 0,2°, 3-horaire |
+| Vent, prévisions « modèle figé » | NOAA GEFSv12 reforecast | 2000-2019 | 1°, 6-horaire, contrôle + 4 membres |
+| Vent, prévisions | NOAA GEFS opérationnel | 2021-2025 → | 1°, 6-horaire, contrôle + 10 |
+| Vent, prévisions | ECMWF IFS HRES | 2023 → | 0,25°, 3-horaire jusqu'à 144 h puis 6-horaire jusqu'à 240 h (natif) |
+| Vent, prévisions | ECMWF AIFS | 2025 → | 0,25°, 6-horaire jusqu'à 360 h (natif) |
+| Vent, prévisions d'ensemble | ECMWF IFS ENS | 2023 → | 1°, 6-horaire jusqu'à 360 h, contrôle + 20 |
+| Vagues, prévisions | ECMWF WAM (HRES) | 2023 → | 0,25°, pas natifs jusqu'à 240 h |
+| Vagues, prévisions | NOAA GFS-Wave (WAVEWATCH III) | mars 2021 → | 0,25°, 00 UTC, pas natifs jusqu'à 240 h |
+| Courants + température, prévisions | Copernicus Marine (analyse & prévision) | à partir du premier jour d'archivage | 1/12°, horaire, 10 jours ; archivé chaque jour |
 
-**Domaine** (fichier `config.yaml`) : **30°N-70°N, 65°O-10°E**. C'est l'extension vers l'ouest et le nord que la S5 a montrée nécessaire (meilleures cellules sur l'ancienne limite à 32°O). On le modifie en un seul endroit.
-
-**Résolutions de stockage.** ERA5 et ECMWF HRES/AIFS à 0,5° (≈ 40-55 km, l'échelle de la grille du routeur) ; GEFS et ECMWF ENS à 1,0° (l'erreur de prévision a une échelle de corrélation de 450 à 650 km, mesurée en S5). Vent u/v à 10 m uniquement, en int16 (précision 0,005 m/s), NetCDF compressé.
+**Pourquoi 30 ans d'ERA5** : une normale climatique fait 30 ans ; la variabilité interannuelle (NAO, blocages) demande 20 à 30 hivers indépendants. **Pourquoi plusieurs sources de prévision** : comparer et croiser ECMWF et NOAA, et séparer le niveau d'erreur actuel (années récentes) de sa structure (reforecast GEFS, même modèle sur 20 ans).
 
 ## 2. Les sources, vérifiées le 13 novembre 2026
 
@@ -32,20 +42,20 @@
 
 **ERA5** : gratuit, usage commercial autorisé (licence Copernicus). Copie publique **ARCO-ERA5** de Google en Zarr : pas de compte, pas de file d'attente, idéale pour une extraction automatique.
 
-## 3. Volumes (mesurés lors des tests du 13 novembre 2026)
+## 3. Volumes (mesurés le 13 novembre 2026 sur le nouveau domaine)
 
-| Jeu | Contenu | Mesure | Volume total |
-|---|---|---|---|
-| ERA5 0,5° horaire | 1995-2025 | 21 Mo par mois | ≈ 7,8 Go |
-| GEFSv12 reforecast 1° | 2000-2019, contrôle + 4, 0-240 h / 6 h | 1,6 Mo par jour | ≈ 12 Go |
-| GEFS opérationnel 1° | 2021-2025, 00 UTC, contrôle + 10 | 3,5 Mo par jour | ≈ 6,4 Go |
-| ECMWF IFS HRES 0,5° (open data) | depuis 2023 (00 et 12 UTC) | ≈ 2,3 Mo par jour | ≈ 0,85 Go par an |
-| ECMWF IFS ENS 1° (open data) | depuis 2023, 00 UTC, contrôle + 20 | 6,2 à 6,6 Mo par jour | ≈ 2,4 Go par an |
-| ECMWF AIFS 0,5° (open data) | depuis 2025 (grille régulière) | ≈ 2,3 Mo par jour | ≈ 0,85 Go par an |
-| ECMWF HRES 2016-2022 (WB2) | si la licence est validée | — | ≈ 5 Go |
-| **Total** | | | **≈ 40 à 45 Go**, puis ≈ 5 Go par an |
+| Jeu | Mesure | Total |
+|---|---|---|
+| ERA5 vent 0,25° horaire | 136 Mo par mois | ≈ 50 Go (31 ans) |
+| ERA5 vagues 0,5° horaire | 139 Mo par mois | ≈ 52 Go |
+| ERA5 température de surface | 2 Mo par mois | ≈ 1 Go |
+| GLORYS12 courants + température | estimation ≈ 1 Go par an | ≈ 30 Go |
+| GEFS reforecast + opérationnel | 1,6 à 3,5 Mo par jour sur l'ancien domaine (environ ×2,7 sur le nouveau) | ≈ 40 Go |
+| ECMWF HRES / AIFS / vagues / ENS | 24 / ≈ 20 / 35 / ≈ 15 Mo par jour | ≈ 33 Go par an |
+| GFS-Wave | ≈ 18 Mo par jour | ≈ 6,5 Go par an |
+| **Total** | | **≈ 300 Go**, puis ≈ 45 Go par an |
 
-**Profondeur réelle de la copie AWS d'ECMWF (testée)** : IFS HRES et IFS ENS disponibles au moins depuis juin 2023 ; AIFS sur grille régulière à partir de 2025 (les fichiers AIFS plus anciens sont sur une grille gaussienne réduite, non pris en charge pour l'instant).
+WAVERYS (≈ 2 Go par an) n'est pas lancé par défaut : il double ERA5 vagues ; à décider en S6 si la qualité des vagues devient un enjeu.
 
 ## 4. Où stocker, et comment les agents y accèdent sans vous coûter de jetons
 
@@ -88,6 +98,8 @@ Je lis les journaux d'exécution via l'API GitHub, je corrige ce qui casse (les 
 Les tâches ratées se relancent individuellement (`fail-fast: false`) ; une journée manquante est journalisée sans faire perdre le mois.
 
 **Étape 5 — Agrégation quotidienne automatique (aucune action).** Le workflow `daily` tourne chaque jour à 09 h 17 UTC. Il revérifie les 3 derniers jours, ne télécharge que les runs manquants (ECMWF IFS HRES 00/12 UTC, IFS ENS 00 UTC contrôle + 20 membres, AIFS 00/12 UTC ; GEFS 00 UTC contrôle + 10 membres), les **fusionne dans un fichier par produit et par mois** et republie ces fichiers mensuels dans les Releases `ecmwf-open-uv10-v1` et `gefs-oper-uv10-1p0-v1` — les mêmes que celles de l'extraction historique, donc une série continue. Un jour manqué (panne, publication tardive) est rattrapé le lendemain ; pour combler un trou plus long, lancer `daily` à la main avec `lookback` = 30.
+
+**Étape 5 bis — Compte Copernicus Marine (gratuit, 5 min, vous).** Créer un compte sur marine.copernicus.eu, puis, dans le dépôt `circeo-meteo` → Settings → Secrets and variables → Actions, ajouter `COPERNICUSMARINE_SERVICE_USERNAME` et `COPERNICUSMARINE_SERVICE_PASSWORD`. Sans ces secrets, les courants ne sont pas téléchargés (le reste fonctionne).
 
 **Étape 6 — Utilisation en S6 (moi).** `client/fetch_meteo.py --list` donne l'inventaire ; les agents téléchargent par motif (`--pattern 'era5_uv10_0p5_20*.nc'`) ; chaque cas S6 est tracé dans MLflow avec l'identifiant de la Release et les sha256 (version des données).
 

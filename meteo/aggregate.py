@@ -22,15 +22,14 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from .common import manifest_entry, write_nc
+from .common import CFG, manifest_entry, res_tag, write_nc
 
+_E = CFG["datasets"]["ecmwf_open"]["products"]
 PRODUCTS = {  # product -> (file prefix, builder kind)
-    "oper": ("ecmwf_oper_uv10_0p5", "ecmwf"),
-    "aifs": ("ecmwf_aifs_uv10_0p5", "ecmwf"),
-    "enfo": ("ecmwf_enfo_uv10_1p0", "ecmwf"),
-    "gefs": ("gefs_oper_uv10_1p0", "gefs"),
+    **{p: (f"ecmwf_{p}_uv10_{res_tag(c['res'])}", "ecmwf") for p, c in _E.items()},
+    "gefs": (f"gefs_oper_uv10_{res_tag(CFG['datasets']['gefs_oper']['res'])}", "gefs"),
 }
-INITS_PER_DAY = {"oper": (0, 12), "aifs": (0, 12), "enfo": (0,), "gefs": (0,)}
+INITS_PER_DAY = {**{p: tuple(c["runs"]) for p, c in _E.items()}, "gefs": (0,)}
 
 
 def monthly_path(d: Path, prefix: str, day: pd.Timestamp) -> Path:

@@ -31,7 +31,7 @@ jobs:
       - name: download the current monthly files
         run: |
           mkdir -p monthly
-          for TAG in ecmwf-open-uv10-v1 gefs-oper-uv10-1p0-v1; do
+          for TAG in ecmwf-open-uv10-v2 gefs-oper-uv10-1p0-v2; do
             for M in $(date -u -d '-30 days' +%Y%m) $(date -u +%Y%m); do
               gh release download "$TAG" -R "$REPO" -p "*_${M}.nc" -D monthly --skip-existing 2>/dev/null || true
             done
@@ -42,7 +42,7 @@ jobs:
       - name: upload updated monthly files
         run: |
           for f in $(cat monthly/touched.txt); do
-            case "$(basename $f)" in gefs_*) TAG=gefs-oper-uv10-1p0-v1;; *) TAG=ecmwf-open-uv10-v1;; esac
+            case "$(basename $f)" in gefs_*) TAG=gefs-oper-uv10-1p0-v2;; *) TAG=ecmwf-open-uv10-v2;; esac
             gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 || \
               gh release create "$TAG" -R "$REPO" --title "$TAG" --notes-file docs/release_notes.md
             M="monthly/manifest_$(basename ${f%.nc}).json"

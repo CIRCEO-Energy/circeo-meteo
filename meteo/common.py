@@ -3,10 +3,10 @@
 Storage conventions (identical for every dataset, so that agents can open any file the same way):
 
 * variables ``u10`` / ``v10`` [m/s], wind *towards* (meteorological u/v components);
-* longitudes in [-180, 180), latitudes ascending, regular grid (0.5 deg or 1.0 deg);
+* longitudes in [-180, 180), latitudes ascending, regular grid (0.25, 0.5 or 1.0 deg);
 * int16 with scale_factor 0.01 m/s, zlib level 4 + shuffle (lossless to 0.005 m/s);
 * forecast files: dims (init, [member,] lead, lat, lon); ``lead`` in hours (int16);
-* one file per year (reanalysis) or per month (forecasts), each < 2 GiB (GitHub Release limit).
+* one file per month, each < 2 GiB (GitHub Release limit).
 """
 from __future__ import annotations
 
@@ -23,6 +23,21 @@ CFG = yaml.safe_load((ROOT / "config.yaml").read_text())
 BOX = CFG["box"]  # lat_min, lat_max, lon_min, lon_max (lon in [-180, 180))
 ENC = {"dtype": "int16", "scale_factor": 0.01, "_FillValue": -32768, "zlib": True,
        "complevel": 4, "shuffle": True}
+
+
+def res_tag(res: float) -> str:
+    """0.25 -> '0p25', 1.0 -> '1p0'."""
+    t = f"{res:.2f}".rstrip("0")
+    t = t + "0" if t.endswith(".") else t
+    return t.replace(".", "p")
+
+
+def expand_steps(spec: list[list[int]]) -> list[int]:
+    """[[0, 144, 3], [150, 240, 6]] -> [0, 3, ..., 144, 150, ..., 240]."""
+    out = []
+    for a, b, d in spec:
+        out += [x for x in range(a, b + 1, d) if x not in out]
+    return out
 
 
 def to_pm180(ds: xr.Dataset, lon: str = "longitude") -> xr.Dataset:

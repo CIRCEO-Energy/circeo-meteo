@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from .common import CFG, cut_box, regrid, standardise, write_nc
+from .common import CFG, cut_box, expand_steps, regrid, res_tag, standardise, write_nc
 
 ATTR = "Adapted from ECMWF forecast data by ECMWF, licensed under CC BY 4.0"
 
@@ -62,32 +62,30 @@ def build_open_month(year: int, month: int, out: Path, products=("oper", "aifs",
                      days: list[int] | None = None) -> list[Path]:
     """Monthly files of ECMWF open data (fast parallel index-based reader, see ecmwf_fetch)."""
     from .ecmwf_fetch import fetch_run
-    D = CFG["datasets"]["ecmwf_open"]
-    lead0, lead1, dl = D["leads_h"]
-    steps = list(range(lead0, lead1 + 1, dl))
+    P = CFG["datasets"]["ecmwf_open"]["products"]
+    lic = CFG["datasets"]["ecmwf_open"]["licence"]
     first = pd.Timestamp(year, month, 1)
     dates = [d for d in pd.date_range(first, first + pd.offsets.MonthEnd(0), freq="D")
              if not days or d.day in days]
     files = []
     for prod in products:
+        cfg = P[prod]
+        steps = expand_steps(cfg["steps"])
         parts = []
         for d in dates:
-            for hh in ((0,) if prod == "enfo" else (0, 12)):  # ENS kept at 00 UTC (volume)
+            for hh in cfg["runs"]:
                 try:
-                    ds = fetch_run(prod, d, hh, steps,
-                                   D["ens_members"] if prod == "enfo" else None)
-                    res = D["res_ens"] if prod == "enfo" else D["res_oper"]
-                    ds = regrid(ds, res).astype("float32")  # already standardised/cropped
+                    ds = fetch_run(prod, d, hh, steps, cfg.get("members"))
+                    ds = regrid(ds, cfg["res"]).astype("float32")  # already cropped
                     parts.append(ds.expand_dims(
                         init=[np.datetime64(d + pd.Timedelta(hours=hh), "ns")]))
                     print(f"ecmwf {prod} {d:%Y-%m-%d} {hh:02d}z ok", flush=True)
                 except Exception as exc:  # noqa: BLE001 - keep the rest of the month
                     print(f"ecmwf {prod} {d:%Y-%m-%d} {hh:02d}z MISSING: {exc!r}", flush=True)
         if parts:
-            ds = xr.concat(parts, "init")
-            res = "1p0" if prod == "enfo" else "0p5"
+            ds = xr.concat(parts, "init", join="outer")
             tag = f"{year}{month:02d}" if not days else f"{year}{month:02d}_d{days[0]:02d}"
-            files.append(write_nc(ds, out / f"ecmwf_{prod}_uv10_{res}_{tag}.nc",
-                                  {"source": "ECMWF open data (AWS mirror)",
-                                   "licence": D["licence"], "attribution": ATTR}))
+            files.append(write_nc(ds, out / f"ecmwf_{prod}_uv10_{res_tag(cfg['res'])}_{tag}.nc",
+                                  {"source": "ECMWF open data (AWS mirror)", "licence": lic,
+                                   "attribution": ATTR}))
     return files

@@ -1,7 +1,6 @@
 """ERA5 hourly 10 m wind from Google's public ARCO-ERA5 Zarr (no account, no queue).
 
-One output file per year: ``era5_uv10_0p5_<YYYY>.nc`` (time, lat, lon), hourly, 0.5 deg box means.
-Read month by month to bound memory (~150 MB per variable per month at 0.25 deg).
+One output file per month: ``era5_uv10_0p25_<YYYYMM>.nc`` (time, lat, lon), native 0.25 deg, hourly.
 """
 from __future__ import annotations
 
@@ -10,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 import xarray as xr
 
-from .common import CFG, cut_box, regrid, standardise, write_nc
+from .common import CFG, cut_box, regrid, res_tag, standardise, write_nc
 
 D = CFG["datasets"]["era5"]
 VARS = {"10m_u_component_of_wind": "u10", "10m_v_component_of_wind": "v10"}
@@ -22,21 +21,20 @@ def open_arco() -> xr.Dataset:
 
 
 def build_year(year: int, out: Path, months: list[int] | None = None) -> list[Path]:
+    """One file per month: ``era5_uv10_<res>_<YYYYMM>.nc`` (native 0.25 deg, hourly)."""
     src = open_arco()
-    parts = []
+    files = []
     for m in months or range(1, 13):
         t0 = pd.Timestamp(year, m, 1)
         t1 = t0 + pd.offsets.MonthBegin(1) - pd.Timedelta(hours=1)
-        sub = src.sel(time=slice(t0, t1))
-        sub = standardise(sub)
-        sub = cut_box(sub, pad=0.5).load()
-        parts.append(regrid(sub, D["res"]).astype("float32"))
-        print(f"era5 {year}-{m:02d}: {sub.sizes['time']} h", flush=True)
-    ds = xr.concat(parts, "time")
-    tag = f"{year}" if months is None else f"{year}_m{'-'.join(map(str, months))}"
-    f = out / f"era5_uv10_0p5_{tag}.nc"
-    return [write_nc(ds, f, {"source": "ERA5 (ARCO-ERA5, Google Cloud)",
-                             "licence": D["licence"],
-                             "attribution": "Contains modified Copernicus Climate Change Service "
-                                            "information; neither the European Commission nor "
-                                            "ECMWF is responsible for any use of it."})]
+        sub = cut_box(standardise(src.sel(time=slice(t0, t1))), pad=0.5).load()
+        ds = regrid(sub, D["res"]).astype("float32")
+        f = out / f"era5_uv10_{res_tag(D['res'])}_{year}{m:02d}.nc"
+        files.append(write_nc(ds, f, {
+            "source": "ERA5 (ARCO-ERA5, Google Cloud)", "licence": D["licence"],
+            "attribution": "Contains modified Copernicus Climate Change Service information; "
+                           "neither the European Commission nor ECMWF is responsible for any "
+                           "use of it."}))
+        print(f"era5 {year}-{m:02d}: {ds.sizes['time']} h, {f.stat().st_size / 2**20:.0f} MiB",
+              flush=True)
+    return files

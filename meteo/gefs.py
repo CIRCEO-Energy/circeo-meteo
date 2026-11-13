@@ -22,7 +22,7 @@ import requests
 import xarray as xr
 from urllib3.util.retry import Retry
 
-from .common import CFG, regrid, standardise, write_nc
+from .common import CFG, regrid, res_tag, standardise, write_nc
 
 S3R = "https://noaa-gefs-retrospective.s3.amazonaws.com"
 S3O = "https://noaa-gefs-pds.s3.amazonaws.com"
@@ -162,7 +162,7 @@ def build_month(kind: str, year: int, month: int, out: Path,
         return []
     ds = xr.concat(parts, "init")
     tag = f"{year}{month:02d}" + (f"_d{sel[0]:02d}" if sel else "")
-    name = f"gefs_{kind}_uv10_1p0_{tag}.nc"
+    name = f"gefs_{kind}_uv10_{res_tag(D['res'])}_{tag}.nc"
     return [write_nc(ds, out / name, {"source": D["source"], "licence": D["licence"],
                                       "attribution": "NOAA/NCEP GEFS (unaltered values, "
                                                      "regridded to 1 deg box means)"})]

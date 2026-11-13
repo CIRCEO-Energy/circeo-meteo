@@ -57,7 +57,7 @@ def _index(url: str) -> list[dict] | None:
 
 
 def _ranges(entries: list[dict], members: int | None, params=("10u", "10v"),
-            max_gap: int = 8 << 20) -> list[tuple[int, int]]:
+            max_gap: int = 256 << 10) -> list[tuple[int, int]]:
     """Byte ranges of the wanted fields; ranges closer than ``max_gap`` are merged (fewer
     requests: S3 throttles many small ranged GETs on the same object)."""
     keep = []
@@ -78,6 +78,7 @@ def _ranges(entries: list[dict], members: int | None, params=("10u", "10v"),
 
 
 def _get(url: str, ranges, dest: Path) -> None:
+    """Fetch the byte ranges (sequentially within a file; files run in parallel)."""
     with open(dest, "wb") as f:
         for a, b in ranges:
             r = SES.get(url, headers={"Range": f"bytes={a}-{b}"}, timeout=120)
@@ -138,7 +139,7 @@ def fetch_run(product: str, day: pd.Timestamp, hh: int, steps: list[int],
             f = Path(td) / f"s{step:03d}.grib2"
             _get(url, _ranges(idx, members, PARAMS[product]), f)
             return step, f
-        with cf.ThreadPoolExecutor(4 if product == "enfo" else 8) as ex:
+        with cf.ThreadPoolExecutor(8) as ex:
             got = [g for g in ex.map(one, steps) if g is not None]
         if not got:
             raise FileNotFoundError("no step available")

@@ -32,16 +32,20 @@
 
 **ERA5** : gratuit, usage commercial autorisé (licence Copernicus). Copie publique **ARCO-ERA5** de Google en Zarr : pas de compte, pas de file d'attente, idéale pour une extraction automatique.
 
-## 3. Volumes attendus (estimations)
+## 3. Volumes (mesurés lors des tests du 13 novembre 2026)
 
-| Jeu | Contenu | Fichiers | Volume compressé estimé |
+| Jeu | Contenu | Mesure | Volume total |
 |---|---|---|---|
-| ERA5 0,5° horaire | 1995-2025 | 31 fichiers annuels | 6 à 8 Go |
-| GEFSv12 reforecast 1° | 2000-2019, contrôle + 4 membres, 0-240 h / 6 h | 240 fichiers mensuels | 8 à 12 Go |
-| GEFS opérationnel 1° | 2021-2025, 00 UTC, contrôle + 10 membres | 60 fichiers mensuels | 4 à 6 Go |
-| ECMWF HRES (WB2) 0,5° | 2016-2022, 00/12 UTC, 0-240 h | 84 fichiers mensuels | 4 à 6 Go |
-| ECMWF open data | 2024 → aujourd'hui : HRES 0,5°, AIFS 0,5°, ENS 1° (contrôle + 20 membres) | mensuels | 3 à 5 Go par an |
-| **Total** | | | **≈ 30 à 45 Go** |
+| ERA5 0,5° horaire | 1995-2025 | 21 Mo par mois | ≈ 7,8 Go |
+| GEFSv12 reforecast 1° | 2000-2019, contrôle + 4, 0-240 h / 6 h | 1,6 Mo par jour | ≈ 12 Go |
+| GEFS opérationnel 1° | 2021-2025, 00 UTC, contrôle + 10 | 3,5 Mo par jour | ≈ 6,4 Go |
+| ECMWF IFS HRES 0,5° (open data) | depuis 2023 (00 et 12 UTC) | ≈ 2,3 Mo par jour | ≈ 0,85 Go par an |
+| ECMWF IFS ENS 1° (open data) | depuis 2023, 00 UTC, contrôle + 20 | 6,2 à 6,6 Mo par jour | ≈ 2,4 Go par an |
+| ECMWF AIFS 0,5° (open data) | depuis 2025 (grille régulière) | ≈ 2,3 Mo par jour | ≈ 0,85 Go par an |
+| ECMWF HRES 2016-2022 (WB2) | si la licence est validée | — | ≈ 5 Go |
+| **Total** | | | **≈ 40 à 45 Go**, puis ≈ 5 Go par an |
+
+**Profondeur réelle de la copie AWS d'ECMWF (testée)** : IFS HRES et IFS ENS disponibles au moins depuis juin 2023 ; AIFS sur grille régulière à partir de 2025 (les fichiers AIFS plus anciens sont sur une grille gaussienne réduite, non pris en charge pour l'instant).
 
 ## 4. Où stocker, et comment les agents y accèdent sans vous coûter de jetons
 
@@ -51,7 +55,7 @@
 
 1. **Le code** (scripts d'extraction, workflows GitHub Actions) est dans la branche `main`. En dépôt public, les minutes d'Actions sont **illimitées**. Les serveurs de GitHub téléchargent depuis AWS et Google, découpent la zone et écrivent des fichiers compacts.
 2. **Les données** sont publiées comme **pièces jointes de Releases du même dépôt** (une Release par jeu, un fichier par an ou par mois), avec le jeton intégré des workflows (`GITHUB_TOKEN`) : **aucun jeton personnel à créer**. GitHub ne limite ni le volume total ni la bande passante des Releases, seulement la taille de chaque fichier (< 2 Gio) — contrairement à Git LFS (10 Gio de stockage et 10 Gio de bande passante par mois en gratuit) et au dépôt git lui-même (< 1-5 Go recommandés). Un dépôt suffit ; inutile d'en faire un par année.
-3. **Accès des agents** : une fois `circeo-meteo` rattaché à la session, l'agent télécharge ce dont il a besoin avec `client/fetch_meteo.py` (`gh release download`, vérification sha256, cache local). Les données ne transitent jamais par la conversation : **aucun jeton consommé** pour les transferts, seulement pour l'analyse.
+3. **Accès des agents** : une fois `circeo-meteo` rattaché à la session, l'agent télécharge ce dont il a besoin avec `client/fetch_meteo.py` (API REST de GitHub, vérification sha256, cache local ; testé depuis l'environnement des agents). Les données ne transitent jamais par la conversation : **aucun jeton consommé** pour les transferts, seulement pour l'analyse.
 4. **Rien de confidentiel n'y entre** : ni polaire, ni résultat de routage, ni donnée client. Les analyses S6 restent dans le dépôt privé du routeur.
 
 Ni votre machine ni votre quota Claude ne sont sollicités pour l'extraction : tout tourne sur GitHub Actions.

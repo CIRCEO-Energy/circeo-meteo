@@ -137,9 +137,31 @@ def write_nc(ds: xr.Dataset, path: Path, attrs: dict) -> Path:
         ds[v].attrs.update(units=units, long_name=name)
         enc[v] = {**ENC, "scale_factor": scale, "add_offset": offset}
     tmp = path.with_suffix(".tmp.nc")
+    if ds.nbytes > 2 ** 29 and ds[keep[0]].ndim > 2:
+        # encode/write slab by slab: packing a whole month at once builds float64
+        # temporaries several times the data size (14 GB peak for a GEFS reforecast month)
+        d0 = ds[keep[0]].dims[0]
+        ds = ds.chunk({d0: 1})
     ds.to_netcdf(tmp, encoding=enc, engine="netcdf4")
     tmp.replace(path)
     return path
+
+
+def retrying(fn, *args, attempts: int = 3, pause: float = 90.0, **kw):
+    """Call ``fn``; on a transient error (throttling, network) wait and retry the whole unit.
+    FileNotFoundError (data absent from the source) is not retried."""
+    import time
+    for i in range(attempts):
+        try:
+            return fn(*args, **kw)
+        except FileNotFoundError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            if i == attempts - 1:
+                raise
+            print(f"  retry {i + 1}/{attempts - 1} in {pause * (i + 1):.0f}s after {exc!r:.160}",
+                  flush=True)
+            time.sleep(pause * (i + 1))
 
 
 def sha256(path: Path) -> str:

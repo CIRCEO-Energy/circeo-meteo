@@ -38,7 +38,8 @@ def expectations(name: str) -> dict:
     for key in ("gefs_reforecast", "gefs_oper", "gefs_ctl"):
         if name.startswith(key):
             c = D[key]
-            mem = {"gefs_oper": c.get("members", 0) + 1, "gefs_ctl": 1}.get(key)
+            mem = {"gefs_oper": lambda: int(c["members"]) + 1, "gefs_ctl": lambda: 1}.get(
+                key, lambda: None)()
             return {"leads": expand_steps(c["leads_h"]), "runs": 1, "members": mem}
     if name.startswith("gfs_wave"):
         c = D["gfs_wave"]

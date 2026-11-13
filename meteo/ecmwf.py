@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from .common import CFG, cut_box, expand_steps, regrid, res_tag, standardise, write_nc
+from .common import CFG, cut_box, expand_steps, regrid, res_tag, retrying, standardise, write_nc
 
 ATTR = "Adapted from ECMWF forecast data by ECMWF, licensed under CC BY 4.0"
 
@@ -82,7 +82,7 @@ def build_open_month(year: int, month: int, out: Path,
             for hh in cfg["runs"]:
                 t1 = time.time()
                 try:
-                    ds = fetch_run(prod, d, hh, steps, cfg.get("members"))
+                    ds = retrying(fetch_run, prod, d, hh, steps, cfg.get("members"))
                     ds = regrid(ds, cfg["res"]).astype("float32")  # already cropped
                     day_parts.append(ds.expand_dims(
                         init=[np.datetime64(d + pd.Timedelta(hours=hh), "ns")]))

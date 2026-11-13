@@ -24,7 +24,7 @@ import requests
 import xarray as xr
 from urllib3.util.retry import Retry
 
-from .common import CFG, cut_box, expand_steps, regrid, res_tag, standardise, write_nc
+from .common import CFG, cut_box, expand_steps, regrid, res_tag, retrying, standardise, write_nc
 
 S3R = "https://noaa-gefs-retrospective.s3.amazonaws.com"
 S3O = "https://noaa-gefs-pds.s3.amazonaws.com"
@@ -156,8 +156,8 @@ def build_month(kind: str, year: int, month: int, out: Path,
     with tempfile.TemporaryDirectory() as td:
         for day in sel:
             try:
-                ds = (reforecast_day(day, Path(td)) if kind == "reforecast"
-                      else oper_day(day, Path(td), dataset))
+                ds = (retrying(reforecast_day, day, Path(td)) if kind == "reforecast"
+                      else retrying(oper_day, day, Path(td), dataset))
                 print(f"{dataset} {day:%Y-%m-%d} ok {dict(ds.sizes)}", flush=True)
             except Exception as exc:  # noqa: BLE001 - a missing day must not lose the month
                 print(f"{dataset} {day:%Y-%m-%d} MISSING: {exc!r}", flush=True)

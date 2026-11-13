@@ -12,6 +12,7 @@ Output: one file per month and product, dims (init, [member,] lead, lat, lon).
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import numpy as np
@@ -79,12 +80,14 @@ def build_open_month(year: int, month: int, out: Path,
         for d in dates:
             day_parts = []
             for hh in cfg["runs"]:
+                t1 = time.time()
                 try:
                     ds = fetch_run(prod, d, hh, steps, cfg.get("members"))
                     ds = regrid(ds, cfg["res"]).astype("float32")  # already cropped
                     day_parts.append(ds.expand_dims(
                         init=[np.datetime64(d + pd.Timedelta(hours=hh), "ns")]))
-                    print(f"ecmwf {prod} {d:%Y-%m-%d} {hh:02d}z ok", flush=True)
+                    print(f"ecmwf {prod} {d:%Y-%m-%d} {hh:02d}z ok {dict(ds.sizes)} "
+                          f"{time.time() - t1:.0f}s", flush=True)
                 except Exception as exc:  # noqa: BLE001 - keep the rest of the month
                     print(f"ecmwf {prod} {d:%Y-%m-%d} {hh:02d}z MISSING: {exc!r}", flush=True)
             if day_parts and cfg.get("file") == "daily":

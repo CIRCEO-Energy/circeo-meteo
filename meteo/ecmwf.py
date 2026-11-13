@@ -4,15 +4,14 @@
   00/12 UTC, leads 0-240 h every 6 h). The bucket LICENSE file is printed and must be accepted
   explicitly (``--accept-licence``): WB2 states that TIGGE-derived datasets are research-only;
   HRES comes from ECMWF's archive (historical data under CC-BY-4.0) but the file is the authority.
-* Open data: ``ecmwf-opendata`` client on the AWS mirror (s3://ecmwf-forecasts), CC-BY-4.0:
+* Open data: AWS mirror (s3://ecmwf-forecasts), CC-BY-4.0, read by ``ecmwf_fetch`` (parallel):
   IFS ``oper`` (HRES / ENS control), IFS ``enfo`` (control + N perturbed) and ``aifs-single``.
-  Only 10u/10v are fetched (the client uses the .index files, i.e. HTTP byte ranges).
+  only 10u/10v are fetched, from the .index files (HTTP byte ranges).
 
 Output: one file per month and product, dims (init, [member,] lead, lat, lon).
 """
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -59,55 +58,27 @@ def build_wb2_month(year: int, month: int, out: Path, accept: bool) -> list[Path
 
 
 # ------------------------------------------------------------------------------ open data
-def _fetch(client, date, time, model, stream, steps, ftype="fc", number=None) -> xr.Dataset:
-    """10u/10v of one run from the open-data mirror, standardised (lead in hours)."""
-    with tempfile.TemporaryDirectory() as td:
-        f = Path(td) / "x.grib2"
-        req = dict(date=date.strftime("%Y%m%d"), time=time, step=steps, param=["10u", "10v"],
-                   target=str(f), model=model, stream=stream, type=ftype)
-        if number is not None:
-            req["number"] = number
-        client.retrieve(**req)
-        ds = xr.open_dataset(f, engine="cfgrib", backend_kwargs={"indexpath": ""}).load()
-    ds = ds.assign_coords(lead=(ds["step"] / np.timedelta64(1, "h")).astype("int16"))
-    ds = ds.swap_dims(step="lead").drop_vars([c for c in ("step", "valid_time", "time",
-                                                          "heightAboveGround", "surface")
-                                              if c in ds.coords])
-    return standardise(ds[["u10", "v10"]] if "u10" in ds else ds)
-
-
 def build_open_month(year: int, month: int, out: Path, products=("oper", "aifs", "enfo"),
                      days: list[int] | None = None) -> list[Path]:
-    from ecmwf.opendata import Client
+    """Monthly files of ECMWF open data (fast parallel index-based reader, see ecmwf_fetch)."""
+    from .ecmwf_fetch import fetch_run
     D = CFG["datasets"]["ecmwf_open"]
-    client = Client(source="aws")
     lead0, lead1, dl = D["leads_h"]
     steps = list(range(lead0, lead1 + 1, dl))
-    dates = pd.date_range(f"{year}-{month:02d}-01", periods=1, freq="MS")
-    dates = pd.date_range(dates[0], dates[0] + pd.offsets.MonthEnd(0), freq="D")
-    if days:
-        dates = [d for d in dates if d.day in days]
+    first = pd.Timestamp(year, month, 1)
+    dates = [d for d in pd.date_range(first, first + pd.offsets.MonthEnd(0), freq="D")
+             if not days or d.day in days]
     files = []
     for prod in products:
         parts = []
         for d in dates:
-            for hh in (0, 12):
-                if prod == "enfo" and hh == 12:
-                    continue  # ENS kept at 00 UTC only (volume)
+            for hh in ((0,) if prod == "enfo" else (0, 12)):  # ENS kept at 00 UTC (volume)
                 try:
-                    if prod == "oper":
-                        ds = regrid(_fetch(client, d, hh, "ifs", "oper", steps), D["res_oper"])
-                    elif prod == "aifs":
-                        ds = regrid(_fetch(client, d, hh, "aifs-single", "oper", steps),
-                                    D["res_oper"])
-                    else:
-                        nums = list(range(1, D["ens_members"] + 1))
-                        cf_ = _fetch(client, d, hh, "ifs", "enfo", steps, "cf")
-                        pf = _fetch(client, d, hh, "ifs", "enfo", steps, "pf", nums)
-                        cf_ = cf_.drop_vars("number", errors="ignore").expand_dims(member=[0])
-                        pf = pf.rename(number="member")
-                        ds = regrid(xr.concat([cf_, pf], "member"), D["res_ens"])
-                    parts.append(ds.astype("float32").expand_dims(
+                    ds = fetch_run(prod, d, hh, steps,
+                                   D["ens_members"] if prod == "enfo" else None)
+                    res = D["res_ens"] if prod == "enfo" else D["res_oper"]
+                    ds = regrid(standardise(ds), res).astype("float32")
+                    parts.append(ds.expand_dims(
                         init=[np.datetime64(d + pd.Timedelta(hours=hh), "ns")]))
                     print(f"ecmwf {prod} {d:%Y-%m-%d} {hh:02d}z ok", flush=True)
                 except Exception as exc:  # noqa: BLE001 - keep the rest of the month

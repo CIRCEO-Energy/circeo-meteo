@@ -54,7 +54,7 @@ jobs:
           ARGS="--year ${{ matrix.year }}"
           if [ -n "${{ matrix.month }}" ]; then ARGS="$ARGS --month ${{ matrix.month }}"; fi
           python -m meteo.build ${{ inputs.dataset }} $ARGS ${{ inputs.extra }} --out out
-      - name: upload to the private data repository
+      - name: upload to this repository's Releases
         env:
           GH_TOKEN: ${{ github.token }}
           DATA_REPO: ${{ github.repository }}

@@ -27,18 +27,35 @@ def gh_json(*args: str):
     return json.loads(out)
 
 
+def _direct(url: str, tmp: Path) -> bool:
+    """Public assets: plain HTTPS download (CDN), no API call, no API rate limit."""
+    import shutil
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url, timeout=600) as r, open(tmp, "wb") as f:
+            shutil.copyfileobj(r, f, 8 << 20)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def download_asset(repo: str, asset: dict, dest: Path) -> None:
-    """REST asset download (``gh release download`` relies on GraphQL, which may be blocked)."""
+    """Direct public URL first; REST asset API as fallback (``gh release download`` relies on
+    GraphQL, which may be blocked)."""
     import time
     tmp = dest.with_suffix(dest.suffix + ".part")
-    for k in range(4):  # transient API errors / secondary rate limits
+    for k in range(4):  # transient errors / rate limits
+        url = asset.get("browser_download_url")
+        if url and _direct(url, tmp) and tmp.stat().st_size == asset["size"]:
+            tmp.replace(dest)
+            return
         with open(tmp, "wb") as f:
             r = subprocess.run(["gh", "api", "-H", "Accept: application/octet-stream",
                                 f"repos/{repo}/releases/assets/{asset['id']}"], stdout=f)
         if r.returncode == 0 and tmp.stat().st_size == asset["size"]:
             tmp.replace(dest)
             return
-        time.sleep(10 * (k + 1))
+        time.sleep(15 * (k + 1))
     raise SystemExit(f"download failed: {dest.name}")
 
 

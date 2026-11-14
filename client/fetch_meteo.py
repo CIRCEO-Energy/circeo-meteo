@@ -29,13 +29,17 @@ def gh_json(*args: str):
 
 def download_asset(repo: str, asset: dict, dest: Path) -> None:
     """REST asset download (``gh release download`` relies on GraphQL, which may be blocked)."""
+    import time
     tmp = dest.with_suffix(dest.suffix + ".part")
-    with open(tmp, "wb") as f:
-        subprocess.run(["gh", "api", "-H", "Accept: application/octet-stream",
-                        f"repos/{repo}/releases/assets/{asset['id']}"], stdout=f, check=True)
-    if tmp.stat().st_size != asset["size"]:
-        raise SystemExit(f"incomplete download: {dest.name}")
-    tmp.replace(dest)
+    for k in range(4):  # transient API errors / secondary rate limits
+        with open(tmp, "wb") as f:
+            r = subprocess.run(["gh", "api", "-H", "Accept: application/octet-stream",
+                                f"repos/{repo}/releases/assets/{asset['id']}"], stdout=f)
+        if r.returncode == 0 and tmp.stat().st_size == asset["size"]:
+            tmp.replace(dest)
+            return
+        time.sleep(10 * (k + 1))
+    raise SystemExit(f"download failed: {dest.name}")
 
 
 def sha256(p: Path) -> str:
@@ -65,11 +69,14 @@ def main():
     dest.mkdir(parents=True, exist_ok=True)
     assets = {x["name"]: x for x in rel["assets"]}
     sums = {}
-    for name in [n for n in assets if n.startswith("manifest_")]:
+    want = [n for n in assets if fnmatch.fnmatch(n, a.pattern) and not n.startswith("manifest_")]
+    # only the manifests of the wanted files (one small request each)
+    for name in [f"manifest_{Path(n).stem}.json" for n in want]:
+        if name not in assets:
+            continue
         download_asset(a.repo, assets[name], dest / name)
         for e in json.loads((dest / name).read_text()):
             sums[e["file"]] = e["sha256"]
-    want = [n for n in assets if fnmatch.fnmatch(n, a.pattern) and not n.startswith("manifest_")]
     for name in sorted(want):
         f = dest / name
         if f.exists() and f.stat().st_size == assets[name]["size"]:

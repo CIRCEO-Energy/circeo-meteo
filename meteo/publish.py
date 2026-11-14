@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import time
 from collections import defaultdict
 from pathlib import Path
 
@@ -30,8 +31,18 @@ def main():
             subprocess.run(["gh", "release", "create", tag, "-R", a.repo, "--title", tag,
                             "--notes-file", str(notes)], check=False)
         for i in range(0, len(files), 20):
-            subprocess.run(["gh", "release", "upload", tag, *files[i:i + 20], "-R", a.repo,
-                            "--clobber"], check=True)
+            # the API rate limit (1000 requests/h per repository for GITHUB_TOKEN) is shared by
+            # all workflows: wait and retry rather than losing hours of extraction
+            for k in range(8):
+                r = subprocess.run(["gh", "release", "upload", tag, *files[i:i + 20], "-R",
+                                    a.repo, "--clobber"], capture_output=True, text=True)
+                if r.returncode == 0:
+                    break
+                print(f"  upload failed ({r.stderr.strip()[:160]}), retry in {5 * (k + 1)} min",
+                      flush=True)
+                time.sleep(300 * (k + 1))
+            else:
+                raise SystemExit(f"upload to {tag} failed")
         print(f"{tag}: {len(files)} file(s)")
 
 

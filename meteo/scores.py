@@ -71,6 +71,70 @@ class Truth:
         return ds.sel(time=t)
 
 
+ROUTER_POINTS = Path(__file__).with_name("data_router_points.npz")
+"""Sea cells of the HORIZON planning grid (LAEA 40 km, 32W-5E, 38-65N): the router's view."""
+
+
+def bilinear(lat_src, lon_src, plat, plon):
+    """Weights to interpolate a regular (lat, lon) field at points (plat, plon)."""
+    fj = (plat - lat_src[0]) / (lat_src[1] - lat_src[0])
+    fi = (plon - lon_src[0]) / (lon_src[1] - lon_src[0])
+    j0 = np.clip(np.floor(fj).astype(int), 0, lat_src.size - 2)
+    i0 = np.clip(np.floor(fi).astype(int), 0, lon_src.size - 2)
+    wj, wi = fj - j0, fi - i0
+    return j0, i0, wj, wi
+
+
+def at_points(a: np.ndarray, w) -> np.ndarray:
+    """``a`` (..., lat, lon) -> (..., P)."""
+    j0, i0, wj, wi = w
+    return (a[..., j0, i0] * (1 - wj) * (1 - wi) + a[..., j0, i0 + 1] * (1 - wj) * wi
+            + a[..., j0 + 1, i0] * wj * (1 - wi) + a[..., j0 + 1, i0 + 1] * wj * wi)
+
+
+def router_metrics(fu, fv, tu, tv) -> dict:
+    """Router-view metrics at points: vector error and the MSE decomposition of wind speed."""
+    ok = np.isfinite(fu) & np.isfinite(tu)
+    if ok.mean() < 0.95:
+        return {}
+    fu, fv, tu, tv = fu[ok], fv[ok], tu[ok], tv[ok]
+    sf, so = np.hypot(fu, fv), np.hypot(tu, tv)
+    d = sf - so
+    sdf, sdo = sf.std(), so.std()
+    r = np.corrcoef(sf, so)[0, 1]
+    return {"r_se_vec": float(((fu - tu) ** 2 + (fv - tv) ** 2).mean()),
+            "r_bias_spd": float(d.mean()), "r_mse_spd": float((d ** 2).mean()),
+            "r_t_bias": float(d.mean() ** 2), "r_t_amp": float((sdf - sdo) ** 2),
+            "r_t_phase": float(2 * sdf * sdo * (1 - r))}
+
+
+class TruthPoints:
+    """ERA5 at its native 0.25 deg, bilinear at the router points (as the router reads ERA5)."""
+
+    def __init__(self, era5_dir: Path, pts):
+        self.dir, self.pts, self.cache, self.w = Path(era5_dir), pts, {}, None
+
+    def at(self, t: pd.Timestamp):
+        ym = f"{t:%Y%m}"
+        if ym not in self.cache:
+            f = next(self.dir.rglob(f"era5_uv10_0p25_{ym}.nc"), None)
+            if f is None:
+                self.cache[ym] = None
+            else:
+                ds = xr.open_dataset(f)
+                if self.w is None:
+                    self.w = bilinear(ds.lat.values, ds.lon.values, *self.pts)
+                self.cache[ym] = (ds.indexes["time"], at_points(ds.u10.values, self.w),
+                                  at_points(ds.v10.values, self.w))
+            if len(self.cache) > 3:
+                self.cache.pop(next(iter(self.cache)))
+        c = self.cache[ym]
+        if c is None or t not in c[0]:
+            return None
+        k = c[0].get_loc(t)
+        return c[1][k], c[2][k]
+
+
 def ocean_mask(sst_file: Path, lat, lon) -> np.ndarray:
     s = xr.open_dataset(sst_file)["sst"].isel(time=0).load()
     wet = np.isfinite(s).astype("float32")
@@ -92,6 +156,14 @@ def score_files(files: list[Path], era5_dir: Path, sst: Path) -> xr.Dataset:
     ts_vars = ["rmse_vec", "bias_spd", "mae_spd"] + (["em_rmse_vec", "spread", "crps_spd"] if ens else [])
     mp_vars = ["n", "se_vec", "d_spd", "ad_spd"] + (["em_se_vec", "var", "crps_spd"] if ens else [])
     mp = {v: np.zeros((len(mleads), lat.size, lon.size), "float64") for v in mp_vars}
+    rv = ["r_se_vec", "r_bias_spd", "r_mse_spd", "r_t_bias", "r_t_amp", "r_t_phase"] + (
+        ["r_em_se_vec", "r_var"] if ens else [])
+    rpts = None
+    if kind == "wind" and ROUTER_POINTS.exists():
+        z = np.load(ROUTER_POINTS)
+        pts = (z["lat"].astype("float64"), z["lon"].astype("float64"))
+        rpts = (TruthPoints(era5_dir, pts), bilinear(lat, lon, *pts))
+        ts_vars = ts_vars + rv
     rows, inits = [], []
     for f in files:
         ds = xr.open_dataset(f)
@@ -129,6 +201,21 @@ def score_files(files: list[Path], era5_dir: Path, sst: Path) -> xr.Dataset:
                 ts["rmse_vec"][k] = np.sqrt(se[ok].mean())
                 ts["bias_spd"][k] = dsp[ok].mean()
                 ts["mae_spd"][k] = np.abs(dsp[ok]).mean()
+                if rpts is not None:
+                    tp = rpts[0].at(t0 + pd.Timedelta(hours=int(ld)))
+                    if tp is not None:
+                        w = rpts[1]
+                        rm = router_metrics(at_points(cu, w), at_points(cv, w), *tp)
+                        if rm and ens:
+                            good = np.isfinite(U).all(axis=(1, 2))
+                            if good.sum() > 2:
+                                Ug, Vg = U[good], V[good]
+                                eu, ev = at_points(Ug.mean(0), w), at_points(Vg.mean(0), w)
+                                rm["r_em_se_vec"] = float(np.nanmean((eu - tp[0]) ** 2 + (ev - tp[1]) ** 2))
+                                rm["r_var"] = float(np.nanmean(at_points(
+                                    Ug.var(0, ddof=1) + Vg.var(0, ddof=1), w)))
+                        for kk, vv in rm.items():
+                            ts[kk][k] = vv
                 if ens and kind == "wind":
                     good = np.isfinite(U).all(axis=(1, 2))
                     Ue, Ve = U[good], V[good]

@@ -1,0 +1,191 @@
+"""Forecast-vs-ERA5 scores computed from the ARCHIVED forecast files (no new download from the
+sources): every product is scored on its own archive grid against ERA5 brought to that grid with
+the same block-mean regridding as the forecasts.
+
+Two outputs per product and month, both small (``scores_<stem>_<YYYYMM>.nc``):
+
+* time series, dims (init, lead), means over the ocean points of the box:
+  ``rmse_vec`` (vector wind error, control/deterministic), ``bias_spd``, ``mae_spd``;
+  for ensembles also ``em_rmse_vec`` (ensemble mean), ``spread`` (sqrt of the mean ensemble
+  variance, u+v), ``crps_spd`` (fair CRPS of the wind speed). Waves: the same on ``swh``.
+* maps, dims (map_lead, lat, lon), SUMS over the month's inits (divide by ``n``):
+  ``n``, ``se_vec``, ``d_spd``, ``ad_spd`` (+ ``em_se_vec``, ``var``, ``crps_spd`` for ensembles).
+
+    python -m meteo.scores --files fc/*.nc --era5 era5/ --mask era5_sst_0p25_2023.nc --out scores/
+"""
+from __future__ import annotations
+
+import argparse
+import re
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import xarray as xr
+
+from .common import regrid
+
+MAP_LEADS = (0, 24, 48, 72, 120, 168, 240, 360)
+
+
+def fair_crps(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """Fair CRPS of ensemble ``x`` (member axis 0) against ``y``."""
+    m = x.shape[0]
+    t1 = np.abs(x - y[None]).mean(0)
+    xs = np.sort(x, axis=0)
+    w = (2 * np.arange(1, m + 1) - m - 1).reshape((m,) + (1,) * (x.ndim - 1))
+    t2 = 2 * (w * xs).sum(0) / (m * (m - 1))  # = sum_ij |xi-xj| / (m(m-1))
+    return t1 - 0.5 * t2
+
+
+class Truth:
+    """ERA5 fields at a forecast grid, loaded month by month on demand."""
+
+    def __init__(self, era5_dir: Path, kind: str, lat, lon):
+        self.dir, self.kind, self.lat, self.lon = Path(era5_dir), kind, lat, lon
+        self.cache: dict = {}
+        self.res = float(np.round(lat[1] - lat[0], 4))
+
+    def _month(self, ym: str):
+        if ym not in self.cache:
+            pat = (f"era5_uv10_0p25_{ym}.nc" if self.kind == "wind" else f"era5_waves_0p5_{ym}.nc")
+            f = next(self.dir.rglob(pat), None)
+            if f is None:
+                self.cache[ym] = None
+            else:
+                ds = xr.open_dataset(f)
+                ds = ds[["u10", "v10"]] if self.kind == "wind" else ds[["swh"]]
+                ds = ds.load()
+                src_res = float(np.round(ds.lat[1] - ds.lat[0], 4))
+                if self.res > src_res + 1e-6:
+                    ds = regrid(ds, self.res)
+                self.cache[ym] = ds.sel(lat=self.lat, lon=self.lon, method="nearest")
+            if len(self.cache) > 3:
+                self.cache.pop(next(iter(self.cache)))
+        return self.cache[ym]
+
+    def at(self, t: pd.Timestamp):
+        ds = self._month(f"{t:%Y%m}")
+        if ds is None or t not in ds.indexes["time"]:
+            return None
+        return ds.sel(time=t)
+
+
+def ocean_mask(sst_file: Path, lat, lon) -> np.ndarray:
+    s = xr.open_dataset(sst_file)["sst"].isel(time=0).load()
+    wet = np.isfinite(s).astype("float32")
+    res = float(np.round(lat[1] - lat[0], 4))
+    if res > 0.25 + 1e-6:
+        wet = regrid(wet.to_dataset(name="w"), res)["w"]
+    return (wet.sel(lat=lat, lon=lon, method="nearest").values >= 0.5)
+
+
+def score_files(files: list[Path], era5_dir: Path, sst: Path) -> xr.Dataset:
+    first = xr.open_dataset(files[0])
+    kind = "wind" if "u10" in first else "waves"
+    lat, lon = first["lat"].values, first["lon"].values
+    truth = Truth(era5_dir, kind, lat, lon)
+    wet = ocean_mask(sst, lat, lon)
+    ens = "member" in first.dims and first.sizes["member"] > 1
+    leads = first["lead"].values
+    mleads = [ld for ld in MAP_LEADS if ld in leads]
+    ts_vars = ["rmse_vec", "bias_spd", "mae_spd"] + (["em_rmse_vec", "spread", "crps_spd"] if ens else [])
+    mp_vars = ["n", "se_vec", "d_spd", "ad_spd"] + (["em_se_vec", "var", "crps_spd"] if ens else [])
+    mp = {v: np.zeros((len(mleads), lat.size, lon.size), "float64") for v in mp_vars}
+    rows, inits = [], []
+    for f in files:
+        ds = xr.open_dataset(f)
+        for it in ds["init"].values:
+            t0 = pd.Timestamp(it)
+            ts = {v: np.full(len(leads), np.nan, "float32") for v in ts_vars}
+            fi = ds.sel(init=it).load()
+            for k, ld in enumerate(leads):
+                tr = truth.at(t0 + pd.Timedelta(hours=int(ld)))
+                if tr is None:
+                    continue
+                fl = fi.sel(lead=ld)
+                if kind == "wind":
+                    U, V = fl["u10"].values, fl["v10"].values
+                    tu, tv = tr["u10"].values, tr["v10"].values
+                    if U.ndim == 3:  # member, lat, lon
+                        cu, cv = U[0], V[0]
+                    else:
+                        cu, cv = U, V
+                    ok = wet & np.isfinite(cu) & np.isfinite(tu)
+                    if ok.sum() < 50:
+                        continue
+                    se = (cu - tu) ** 2 + (cv - tv) ** 2
+                    ts_spd = np.hypot(tu, tv)
+                    dsp = np.hypot(cu, cv) - ts_spd
+                else:
+                    S = fl["swh"].values
+                    cs = S[0] if S.ndim == 3 else S
+                    t_s = tr["swh"].values
+                    ok = wet & np.isfinite(cs) & np.isfinite(t_s)
+                    if ok.sum() < 50:
+                        continue
+                    se = (cs - t_s) ** 2
+                    dsp = cs - t_s
+                ts["rmse_vec"][k] = np.sqrt(se[ok].mean())
+                ts["bias_spd"][k] = dsp[ok].mean()
+                ts["mae_spd"][k] = np.abs(dsp[ok]).mean()
+                if ens and kind == "wind":
+                    good = np.isfinite(U).all(axis=(1, 2))
+                    Ue, Ve = U[good], V[good]
+                    if Ue.shape[0] < 2:
+                        continue
+                    emse = (Ue.mean(0) - tu) ** 2 + (Ve.mean(0) - tv) ** 2
+                    var = Ue.var(0, ddof=1) + Ve.var(0, ddof=1)
+                    crps = fair_crps(np.hypot(Ue, Ve), ts_spd)
+                    ts["em_rmse_vec"][k] = np.sqrt(emse[ok].mean())
+                    ts["spread"][k] = np.sqrt(var[ok].mean())
+                    ts["crps_spd"][k] = crps[ok].mean()
+                if ld in mleads:
+                    j = mleads.index(ld)
+                    okf = ok.astype("float64")
+                    mp["n"][j] += okf
+                    mp["se_vec"][j] += np.where(ok, se, 0)
+                    mp["d_spd"][j] += np.where(ok, dsp, 0)
+                    mp["ad_spd"][j] += np.where(ok, np.abs(dsp), 0)
+                    if ens and kind == "wind":
+                        mp["em_se_vec"][j] += np.where(ok, emse, 0)
+                        mp["var"][j] += np.where(ok, var, 0)
+                        mp["crps_spd"][j] += np.where(ok, crps, 0)
+            rows.append(ts)
+            inits.append(np.datetime64(t0, "ns"))
+            print(f"  {t0:%Y-%m-%d %H}z lead0 rmse {ts['rmse_vec'][0]:.2f} "
+                  f"lead~120 {ts['rmse_vec'][min(np.searchsorted(leads, 120), len(leads) - 1)]:.2f}",
+                  flush=True)
+    out = xr.Dataset(
+        {v: (("init", "lead"), np.stack([r[v] for r in rows])) for v in ts_vars},
+        coords={"init": inits, "lead": leads.astype("int16")})
+    for v in mp_vars:
+        out[f"map_{v}"] = (("map_lead", "lat", "lon"), mp[v].astype("float32"))
+    out = out.assign_coords(map_lead=np.array(mleads, "int16"), lat=lat, lon=lon)
+    out.attrs.update(kind=kind, ensemble=int(ens), truth="ERA5 (ARCO, regridded like the forecasts)",
+                     note="maps are sums over inits: divide by map_n")
+    return out.sortby("init")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--files", nargs="+", required=True)
+    ap.add_argument("--era5", required=True, help="directory with era5_uv10 / era5_waves files")
+    ap.add_argument("--mask", required=True, help="an era5_sst file (land = NaN)")
+    ap.add_argument("--out", default="scores")
+    ap.add_argument("--name", help="output name; default from the first file")
+    a = ap.parse_args()
+    files = sorted(Path(f) for f in a.files)
+    res = score_files(files, Path(a.era5), Path(a.mask))
+    stem = a.name or re.sub(r"_(\d{6})(\d{2})?(_d\d+)?\.nc$", r"_\1", files[0].name).replace(".nc", "")
+    Path(a.out).mkdir(parents=True, exist_ok=True)
+    p = Path(a.out) / f"scores_{stem}.nc"
+    enc = {v: {"zlib": True, "complevel": 4} for v in res.data_vars}
+    res.to_netcdf(p, encoding=enc)
+    m = res["rmse_vec"].mean("init")
+    print(p, f"{p.stat().st_size / 2**20:.1f} MiB", "rmse by lead:",
+          {int(ld): round(float(m.sel(lead=ld)), 2) for ld in res["lead"].values[::8]})
+
+
+if __name__ == "__main__":
+    main()

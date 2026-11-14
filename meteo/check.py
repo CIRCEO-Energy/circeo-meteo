@@ -157,8 +157,15 @@ def check_file(path: Path, compare: bool = True) -> dict:
             st["empty_slices"] = f"{int(empty.sum())}/{empty.size}"
             if empty.mean() > 0.02 and not name.startswith("gefs_reforecast"):
                 rep["warn"].append(f"{v} empty slices {int(empty.sum())}/{empty.size}")
-        if v in ("u10", "v10") and st["nan"] > 0.01 and not name.startswith("gefs_reforecast"):
-            rep["fail"].append(f"{v} NaN fraction {st['nan']}")
+        if v in ("u10", "v10") and not name.startswith("gefs_reforecast"):
+            # NaN inside fields that exist (whole missing fields are reported as empty slices)
+            if sp and len(ds[v].dims) > 2:
+                part = (~fin).sum() - int(empty.sum()) * int(np.prod([ds.sizes[d] for d in sp]))
+                st["nan_in_fields"] = round(float(part / max(fin.size, 1)), 4)
+            else:
+                st["nan_in_fields"] = st["nan"]
+            if st["nan_in_fields"] > 0.01:
+                rep["fail"].append(f"{v} NaN fraction inside fields {st['nan_in_fields']}")
         rep["vars"][v] = st
     if compare:
         try:

@@ -38,9 +38,19 @@ def _one(day: pd.Timestamp, hh: int, step: int, tmp: Path) -> xr.Dataset | None:
         if name is None:
             continue
         f = tmp / f"{hh}_{step}_{name}.grib2"
-        _download(url, f, [(offs[i], offs[i + 1] - 1 if i + 1 < len(offs) else None)])
-        ds = xr.open_dataset(f, engine="cfgrib", backend_kwargs={"indexpath": ""}).load()
-        f.unlink()
+        rng = [(offs[i], offs[i + 1] - 1 if i + 1 < len(offs) else None)]
+        ds = None
+        for _attempt in range(3):  # truncated transfers (PrematureEndOfFile) happen: re-fetch
+            try:
+                _download(url, f, rng)
+                ds = xr.open_dataset(f, engine="cfgrib", backend_kwargs={"indexpath": ""}).load()
+                break
+            except Exception as exc:  # noqa: BLE001  (gribapi PrematureEndOfFile, EOFError, ...)
+                print(f"  gfs_wave {day:%Y-%m-%d} {hh:02d}z f{step:03d} {name}: {exc!r:.100}, "
+                      f"re-fetch", flush=True)
+        f.unlink(missing_ok=True)
+        if ds is None:
+            continue
         var = next(iter(ds.data_vars))
         da = ds[var].drop_vars([c for c in ds[var].coords
                                 if c not in ("latitude", "longitude")])

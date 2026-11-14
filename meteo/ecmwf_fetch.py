@@ -86,6 +86,41 @@ def _get(url: str, ranges, dest: Path) -> None:
             f.write(r.content)
 
 
+_TRI: dict = {}
+
+
+def _gaussian_to_regular(ds: xr.Dataset, res: float = 0.25) -> xr.Dataset:
+    """Linear interpolation of a reduced-Gaussian (unstructured ``values``) field onto a regular
+    ``res`` grid covering the study box (+2 deg). The triangulation is cached per grid."""
+    from scipy.interpolate import LinearNDInterpolator
+    from scipy.spatial import Delaunay
+
+    from .common import BOX
+    lat = ds["latitude"].values
+    lon = ((ds["longitude"].values + 180) % 360) - 180
+    pad = 2.0
+    sel = ((lat >= BOX["lat_min"] - pad) & (lat <= BOX["lat_max"] + pad)
+           & (lon >= BOX["lon_min"] - pad) & (lon <= BOX["lon_max"] + pad))
+    key = (lat.size, int(sel.sum()))
+    if key not in _TRI:
+        _TRI[key] = Delaunay(np.c_[lon[sel], lat[sel]])
+    tri = _TRI[key]
+    glat = np.arange(BOX["lat_min"] - 1.0, BOX["lat_max"] + 1.0 + 1e-9, res)
+    glon = np.arange(BOX["lon_min"] - 1.0, BOX["lon_max"] + 1.0 + 1e-9, res)
+    GX, GY = np.meshgrid(glon, glat)
+    out = {}
+    for v in ds.data_vars:
+        a = ds[v].values
+        lead = a.shape[:-1]
+        flat = a.reshape(-1, a.shape[-1])[:, sel]
+        vals = np.stack([LinearNDInterpolator(tri, row)(GX, GY) for row in flat])
+        dims = [d for d in ds[v].dims if d != "values"] + ["latitude", "longitude"]
+        out[v] = (dims, vals.reshape(*lead, glat.size, glon.size).astype("float32"))
+    coords = {c: ds[c] for c in ds[next(iter(ds.data_vars))].dims if c != "values" and c in ds.coords}
+    coords.update(latitude=glat, longitude=glon)
+    return xr.Dataset(out, coords=coords)
+
+
 def _read_step(f: Path, product: str) -> xr.Dataset:
     """u10/v10 of one step file, cropped to the study box at once (bounded memory)."""
     import cfgrib
@@ -104,6 +139,8 @@ def _read_step(f: Path, product: str) -> xr.Dataset:
         raise KeyError(f"no wanted field in step file; variables seen: {seen}")
     out = []
     for ds in found:
+        if "latitude" not in ds.dims and "values" in ds.dims:
+            ds = _gaussian_to_regular(ds)  # AIFS before 2025-02: reduced Gaussian grid N320
         ds = cut_box(standardise(ds), pad=1.0).load()
         if product == "enfo":
             if "number" in ds.dims:

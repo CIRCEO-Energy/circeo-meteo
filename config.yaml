@@ -2,9 +2,11 @@
 # Box (generous): North Atlantic from the Cape Verde / Caribbean latitude to the Denmark Strait,
 # from the US East Coast to the North Sea and the western Mediterranean (S5: the best cells sat on
 # the old 32W edge). 20-75N, 80W-15E.
+# BRANCH box-south (S8, 18/11): southern strip 5-20N only, published in "-s05n20" Releases, stitched
+# to the 20-75N main box by the consumers (overlap row at 20N). Cape Verde trades, Caribbean low-level jet.
 box:
-  lat_min: 20.0
-  lat_max: 75.0
+  lat_min: 5.0
+  lat_max: 20.0
   lon_min: -80.0
   lon_max: 15.0
 
@@ -16,7 +18,7 @@ datasets:
     years: [1995, 2025]      # 31 years
     res: 0.25                # native ERA5 grid, hourly (native); one file per month
     vars: [u10, v10]
-    release: era5-uv10-0p25-v2
+    release: era5-uv10-0p25-v2-s05n20
   era5_waves:
     title: ERA5 hourly ocean waves (ECMWF WAM coupled to IFS); native wave grid 0.5 deg
     source: gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3
@@ -24,7 +26,7 @@ datasets:
     years: [1995, 2025]
     res: 0.5                 # selection of the native 0.5 deg wave points (no averaging)
     vars: [swh, mwd, mwp, pp1d, shww, mdww, mpww, shts, mdts, mpts]
-    release: era5-waves-0p5-v2
+    release: era5-waves-0p5-v2-s05n20
   era5_sst:
     title: ERA5 sea surface temperature (OSTIA-based), daily means
     source: gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3
@@ -32,7 +34,7 @@ datasets:
     years: [1995, 2025]
     res: 0.25
     vars: [sst]
-    release: era5-sst-0p25-v2
+    release: era5-sst-0p25-v2-s05n20
 # --------------------------------------------------------------------------------- forecasts
 # Published in boris-circeo/circeo-meteo-forecasts. Wind: deterministic runs and ensemble controls
 # at native resolution (0.25 deg) and native output steps; full ensembles (all members, native
@@ -47,7 +49,7 @@ datasets:
     leads_h: [[3, 240, 3]]    # the reforecast files start at +3 h (no analysis step)
     res: 0.5
     file: monthly
-    release: gefsv12-reforecast-uv10-0p5-v2
+    release: gefsv12-reforecast-uv10-0p5-v2-s05n20
   gefs_oper:
     title: NOAA GEFS operational ensemble (v12 since 2020-09-23), 00 UTC, control + 30 members
     source: s3://noaa-gefs-pds (atmos/pgrb2ap5)
@@ -57,7 +59,7 @@ datasets:
     leads_h: [[0, 240, 3], [246, 384, 6]]
     res: 0.5
     file: daily
-    release: gefs-oper-uv10-0p5-{year}
+    release: gefs-oper-uv10-0p5-s05n20-{year}
   gefs_ctl:
     title: NOAA GEFS operational control member at native 0.25 deg (atmos/pgrb2sp25), 00 UTC
     source: s3://noaa-gefs-pds (atmos/pgrb2sp25)
@@ -66,7 +68,7 @@ datasets:
     leads_h: [[0, 240, 3]]
     res: 0.25
     file: monthly
-    release: gefs-ctl-uv10-0p25-v2
+    release: gefs-ctl-uv10-0p25-v2-s05n20
   gfs_wave:
     title: NOAA GFS-Wave (WAVEWATCH III, GFSv16+), 00 UTC, native steps, stored at 0.5 deg
     source: s3://noaa-gfs-bdp-pds (gfs.<date>/<HH>/wave/gridded/gfswave.t<HH>z.global.0p25.f<FFF>.grib2)
@@ -76,7 +78,7 @@ datasets:
     steps: [[0, 120, 3], [126, 240, 6]]
     res: 0.5
     file: monthly
-    release: gfs-wave-0p5-v2
+    release: gfs-wave-0p5-v2-s05n20
   cmems_phy_reanalysis:
     title: Copernicus Marine GLORYS12 reanalysis (GLOBAL_MULTIYEAR_PHY_001_030), daily, stored at 0.25 deg
     dataset_id: cmems_mod_glo_phy_my_0.083deg_P1D-m
@@ -86,21 +88,21 @@ datasets:
     res: 0.25
     licence: Copernicus Marine Service licence (free, commercial use allowed, attribution)
     years: [1995, 2025]
-    release: cmems-glorys12-surface-v2
+    release: cmems-glorys12-surface-v2-s05n20
   cmems_phy_forecast:
     title: Copernicus Marine global analysis & forecast (GLOBAL_ANALYSISFORECAST_PHY_001_024), hourly surface, stored at 0.25 deg
     dataset_id: cmems_mod_glo_phy_anfc_0.083deg_PT1H-m
     vars: {uo: uo, vo: vo, thetao: thetao}
     licence: Copernicus Marine Service licence (free, commercial use allowed, attribution)
     res: 0.25
-    release: cmems-phy-anfc-hourly-v2
+    release: cmems-phy-anfc-hourly-v2-s05n20
   cmems_wav_reanalysis:
     title: Copernicus Marine WAVERYS wave reanalysis (GLOBAL_MULTIYEAR_WAV_001_032), 3-hourly, 0.2 deg
     dataset_id: cmems_mod_glo_wav_my_0.2deg_PT3H-i
     vars: {VHM0: swh, VMDR: mwd, VTM10: mwp, VTPK: pp1d, VHM0_WW: shww, VMDR_WW: mdww, VHM0_SW1: shts, VMDR_SW1: mdts, VTM01_SW1: mpts}
     licence: Copernicus Marine Service licence (free, commercial use allowed, attribution)
     years: [1995, 2025]
-    release: cmems-waverys-v2
+    release: cmems-waverys-v2-s05n20
   ecmwf_hres_wb2:
     title: ECMWF IFS HRES 2016-2022 (WeatherBench 2 copy of the ECMWF archive), 00/12 UTC
     source: gs://weatherbench2/datasets/hres/2016-2022-0012-1440x721.zarr
@@ -109,17 +111,17 @@ datasets:
     years: [2016, 2022]
     leads_h: [0, 240, 6]
     res: 0.5
-    release: ecmwf-hres-wb2-uv10-0p5-v2
+    release: ecmwf-hres-wb2-uv10-0p5-v2-s05n20
   ecmwf_open:
     title: ECMWF open data (IFS HRES/oper, IFS ENS, AIFS single, WAM waves)
     source: AWS mirror s3://ecmwf-forecasts (read with meteo/ecmwf_fetch.py)
     licence: CC-BY-4.0 (ECMWF open data)
     products:
       oper: {res: 0.25, runs: [0, 12], steps: [[0, 144, 3], [150, 240, 6]], file: monthly,
-             release: ecmwf-oper-uv10-0p25-v2}
+             release: ecmwf-oper-uv10-0p25-v2-s05n20}
       aifs: {res: 0.25, runs: [0, 12], steps: [[0, 360, 6]], file: monthly,
-             release: ecmwf-aifs-uv10-0p25-v2}
+             release: ecmwf-aifs-uv10-0p25-v2-s05n20}
       enfo: {res: 0.5, runs: [0], members: 50, steps: [[0, 144, 3], [150, 360, 6]],
-             file: daily, release: "ecmwf-enfo-uv10-0p5-{year}"}
+             file: daily, release: "ecmwf-enfo-uv10-0p5-s05n20-{year}"}
       wave: {res: 0.5, runs: [0, 12], steps: [[0, 144, 3], [150, 240, 6]], file: monthly,
-             release: ecmwf-wave-0p5-v2}
+             release: ecmwf-wave-0p5-v2-s05n20}

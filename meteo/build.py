@@ -23,7 +23,7 @@ from .common import manifest_entry
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("dataset", choices=["era5", "era5_waves", "era5_sst", "era5_z500", "era5_synoptic", "gefs_reforecast",
+    ap.add_argument("dataset", choices=["era5", "era5_waves", "era5_sst", "era5_z500", "era5_synoptic", "gefs_reforecast", "gefs_reforecast_syn",
                                         "gefs_oper", "gefs_ctl", "gfs_wave", "ecmwf_hres_wb2", "ecmwf_open",
                                         "cmems_phy_reanalysis", "cmems_phy_forecast",
                                         "cmems_wav_reanalysis"])
@@ -41,9 +41,9 @@ def main():
     if a.dataset.startswith("era5"):
         from .era5 import build_year
         files = build_year(a.year, out, a.months, a.dataset)
-    elif a.dataset in ("gefs_reforecast", "gefs_oper", "gefs_ctl"):
+    elif a.dataset in ("gefs_reforecast", "gefs_oper", "gefs_ctl", "gefs_reforecast_syn"):
         from .gefs import build_month
-        files = build_month(a.dataset.split("_")[1], a.year, a.month, out, a.days)
+        files = build_month(a.dataset[len("gefs_"):], a.year, a.month, out, a.days)
     elif a.dataset == "gfs_wave":
         from .gfswave import build_month as gw
         files = gw(a.year, a.month, out, a.days)

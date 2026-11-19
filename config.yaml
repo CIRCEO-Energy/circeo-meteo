@@ -69,6 +69,17 @@ datasets:
     res: 0.5
     file: monthly
     release: gefsv12-reforecast-uv10-0p5-v2
+  gefs_reforecast_syn:
+    title: NOAA GEFSv12 reforecast control, 00 UTC, MSLP and Z500 (downscaling predictors), days 1-10, 1 deg
+    source: s3://noaa-gefs-retrospective/GEFSv12/reforecast
+    licence: NOAA open data (no restriction, attribution requested)
+    years: [2000, 2019]
+    members: [c00]
+    leads_h: [[12, 240, 12]]
+    res: 1.0
+    box: {lat_min: 0.0, lat_max: 80.0, lon_min: -90.0, lon_max: 40.0}
+    file: monthly
+    release: gefsv12-reforecast-syn-1p0-v1
   gefs_oper:
     title: NOAA GEFS operational ensemble (v12 since 2020-09-23), 00 UTC, control + 30 members
     source: s3://noaa-gefs-pds (atmos/pgrb2ap5)

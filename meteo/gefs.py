@@ -103,6 +103,35 @@ def reforecast_day(day: pd.Timestamp, tmp: Path) -> xr.Dataset:
     return regrid(ds, D["res"]).astype("float32").expand_dims(init=[np.datetime64(day, "ns")])
 
 
+def reforecast_syn_day(day: pd.Timestamp, tmp: Path) -> xr.Dataset:
+    """Control member: MSLP [hPa] and Z500 [gpm] at the 12-hourly leads, 1-deg points of the dataset box."""
+    D = CFG["datasets"]["gefs_reforecast_syn"]
+    B = D["box"]
+    lat = np.round(np.arange(B["lat_min"], B["lat_max"] + 1e-9, D["res"]), 4)
+    lon = np.round(np.arange(B["lon_min"], B["lon_max"] + 1e-9, D["res"]), 4)
+    leads = set(expand_steps(D["leads_h"]))
+    keys = _list(S3R, f"GEFSv12/reforecast/{day:%Y}/{day:%Y%m%d}00/c00/Days:1-10/")
+    das = []
+    for var, pats, fk, scale in (("mslp", ("pres_msl",), {"typeOfLevel": "meanSea"}, 0.01),
+                                 ("z500", ("hgt_pres_abv700mb", "hgt_pres"),
+                                  {"typeOfLevel": "isobaricInhPa", "level": 500}, 1.0)):
+        key = next((k for p_ in pats for k in keys if os.path.basename(k).startswith(p_ + "_")), None)
+        if key is None:
+            print(f"{day:%Y-%m-%d}: no {pats[0]} file", flush=True)
+            continue
+        f = tmp / os.path.basename(key)
+        _download(f"{S3R}/{key}", f)
+        ds = xr.open_dataset(f, engine="cfgrib", backend_kwargs={"filter_by_keys": fk, "indexpath": ""})
+        ds = standardise(ds)
+        da = ds[next(iter(ds.data_vars))].sel(lat=lat, lon=lon, method="nearest").load() * scale
+        f.unlink()
+        da = da.assign_coords(lat=lat.astype("float32"), lon=lon.astype("float32"))
+        da = da.assign_coords(lead=(da["step"] / np.timedelta64(1, "h")).astype("int16")).swap_dims(step="lead")
+        das.append(_drop(da.sel(lead=sorted(leads & set(da["lead"].values.tolist())))).rename(var)
+                   .drop_vars([c for c in ("isobaricInhPa", "meanSea") if c in da.coords], errors="ignore"))
+    return xr.merge(das, compat="override").astype("float32").expand_dims(init=[np.datetime64(day, "ns")])
+
+
 # ------------------------------------------------------------------------------ operational
 def _idx_ranges(url: str, wanted: tuple[str, ...]) -> list[tuple[int, int | None]]:
     r = SES.get(url + ".idx", timeout=60)
@@ -147,16 +176,19 @@ def build_month(kind: str, year: int, month: int, out: Path,
     """kind: 'reforecast' | 'oper' | 'ctl'."""
     dataset = f"gefs_{kind}"
     D = CFG["datasets"][dataset]
+    syn = kind == "reforecast_syn"
     first = pd.Timestamp(year, month, 1)
     sel = [d for d in pd.date_range(first, first + pd.offsets.MonthEnd(0), freq="D")
            if not days or d.day in days]
-    stem = f"gefs_{kind}_uv10_{res_tag(D['res'])}"
-    attrs = {"source": D["source"], "licence": D["licence"], "attribution": ATTR}
+    stem = f"gefs_{kind}_{res_tag(D['res'])}" if syn else f"gefs_{kind}_uv10_{res_tag(D['res'])}"
+    attrs = {"source": D["source"], "licence": D["licence"], "attribution": ATTR,
+             **({"box": __import__("json").dumps(D["box"])} if "box" in D else {})}
     parts, files = [], []
     with tempfile.TemporaryDirectory() as td:
         for day in sel:
             try:
-                ds = (retrying(reforecast_day, day, Path(td)) if kind == "reforecast"
+                ds = (retrying(reforecast_syn_day, day, Path(td)) if syn
+                      else retrying(reforecast_day, day, Path(td)) if kind == "reforecast"
                       else retrying(oper_day, day, Path(td), dataset))
                 print(f"{dataset} {day:%Y-%m-%d} ok {dict(ds.sizes)}", flush=True)
             except Exception as exc:  # noqa: BLE001 - a missing day must not lose the month

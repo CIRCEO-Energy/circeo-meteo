@@ -24,7 +24,7 @@ from .common import CFG, expand_steps
 RANGES = {"u10": (-75, 75), "v10": (-75, 75), "swh": (0, 25), "shww": (0, 25), "shts": (0, 25),
           "mwd": (0, 360), "mdww": (0, 360), "mdts": (0, 360), "dirpw": (0, 360),
           "mwp": (0, 30), "pp1d": (0, 40), "mpww": (0, 30), "mpts": (0, 40),
-          "sst": (265, 310), "thetao": (-3, 35), "uo": (-4, 4), "vo": (-4, 4)}
+          "sst": (265, 310), "mslp": (900, 1085), "z500": (4400, 6200), "thetao": (-3, 35), "uo": (-4, 4), "vo": (-4, 4)}
 
 
 def expectations(name: str) -> dict:
@@ -35,7 +35,7 @@ def expectations(name: str) -> dict:
         c = D["ecmwf_open"]["products"][m.group(1)]
         return {"leads": expand_steps(c["steps"]), "runs": len(c["runs"]),
                 "members": (c.get("members") or 0) + 1 if m.group(1) == "enfo" else None}
-    for key in ("gefs_reforecast", "gefs_oper", "gefs_ctl"):
+    for key in ("gefs_reforecast_syn", "gefs_reforecast", "gefs_oper", "gefs_ctl"):
         if name.startswith(key):
             c = D[key]
             mem = {"gefs_oper": lambda: int(c["members"]) + 1, "gefs_ctl": lambda: 1}.get(

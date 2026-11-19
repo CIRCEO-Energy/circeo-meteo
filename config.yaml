@@ -54,6 +54,11 @@ datasets:
            t2m: [2m_temperature, null]}
     box: {lat_min: 0.0, lat_max: 80.0, lon_min: -90.0, lon_max: 40.0}  # Euro-Atlantic + trade winds
     release: era5-synoptic-1p0-v1
+  ibtracs:
+    title: IBTrACS v04r01 North Atlantic best tracks, 1995 onwards (tropical-cyclone exposure)
+    source: https://www.ncei.noaa.gov/products/international-best-track-archive
+    licence: public domain (NOAA NCEI), cite Knapp et al. 2010
+    release: ibtracs-na-v04r01
 # --------------------------------------------------------------------------------- forecasts
 # Published in boris-circeo/circeo-meteo-forecasts. Wind: deterministic runs and ensemble controls
 # at native resolution (0.25 deg) and native output steps; full ensembles (all members, native

@@ -23,7 +23,7 @@ from .common import manifest_entry
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("dataset", choices=["era5", "era5_waves", "era5_sst", "era5_z500", "era5_synoptic", "gefs_reforecast", "gefs_reforecast_syn",
+    ap.add_argument("dataset", choices=["era5", "era5_waves", "era5_sst", "era5_z500", "era5_synoptic", "ibtracs", "gefs_reforecast", "gefs_reforecast_syn",
                                         "gefs_oper", "gefs_ctl", "gfs_wave", "ecmwf_hres_wb2", "ecmwf_open",
                                         "cmems_phy_reanalysis", "cmems_phy_forecast",
                                         "cmems_wav_reanalysis"])
@@ -38,7 +38,10 @@ def main():
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
-    if a.dataset.startswith("era5"):
+    if a.dataset == "ibtracs":
+        from .ibtracs import build as ib
+        files = ib(out)
+    elif a.dataset.startswith("era5"):
         from .era5 import build_year
         files = build_year(a.year, out, a.months, a.dataset)
     elif a.dataset in ("gefs_reforecast", "gefs_oper", "gefs_ctl", "gefs_reforecast_syn"):

@@ -59,6 +59,11 @@ datasets:
     source: https://www.ncei.noaa.gov/products/international-best-track-archive
     licence: public domain (NOAA NCEI), cite Knapp et al. 2010
     release: ibtracs-na-v04r01
+  indices:
+    title: Monthly climate indices (ONI / Nino3.4, NAO, AMO) for seasonal stratification
+    source: NOAA CPC and PSL
+    licence: public domain (NOAA)
+    release: climate-indices-v1
 # --------------------------------------------------------------------------------- forecasts
 # Published in boris-circeo/circeo-meteo-forecasts. Wind: deterministic runs and ensemble controls
 # at native resolution (0.25 deg) and native output steps; full ensembles (all members, native

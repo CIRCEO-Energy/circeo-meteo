@@ -23,18 +23,18 @@ def build(out: Path, first_year: int = 1995) -> list[Path]:
     r.raise_for_status()
     df = pd.read_csv(io.StringIO(r.text), skiprows=[1], low_memory=False, keep_default_na=False)
     df = df[pd.to_numeric(df["SEASON"], errors="coerce") >= first_year]
-    num = lambda c: pd.to_numeric(df[c], errors="coerce").astype("float32").values  # noqa: E731
+    num = lambda c: pd.to_numeric(df[c], errors="coerce").to_numpy(dtype="float32", na_value=np.nan)  # noqa: E731
     rmax = lambda p: np.nanmax(np.stack([num(f"USA_{p}_{q}") for q in ("NE", "SE", "SW", "NW")]), 0)  # noqa: E731
     ds = xr.Dataset(
-        {"sid": ("obs", df["SID"].values.astype(str)), "name": ("obs", df["NAME"].values.astype(str)),
+        {"sid": ("obs", np.array(df["SID"].tolist(), dtype="U")), "name": ("obs", np.array(df["NAME"].tolist(), dtype="U")),
          "lat": ("obs", num("LAT")), "lon": ("obs", num("LON")), "usa_wind": ("obs", num("USA_WIND")),
          "usa_sshs": ("obs", num("USA_SSHS")), "wmo_wind": ("obs", num("WMO_WIND")),
          "usa_rmw": ("obs", num("USA_RMW")), "r34": ("obs", rmax("R34")), "r50": ("obs", rmax("R50")),
          "r64": ("obs", rmax("R64"))},
-        coords={"time": ("obs", pd.to_datetime(df["ISO_TIME"]).values)},
+        coords={"time": ("obs", pd.to_datetime(df["ISO_TIME"]).to_numpy(dtype="datetime64[ns]"))},
         attrs={"source": URL, "licence": "NOAA NCEI IBTrACS v04r01 (public domain, cite Knapp et al. 2010)",
                "units": "wind kt, radii nmi"})
-    f = out / f"ibtracs_na_{first_year}_{int(df['SEASON'].astype(int).max())}.nc"
+    f = out / f"ibtracs_na_{first_year}_{int(pd.to_numeric(df["SEASON"]).max())}.nc"
     ds.to_netcdf(f)
     print(f"{f.name}: {ds.sizes['obs']} fixes, {len(set(ds['sid'].values))} storms", flush=True)
     return [f]

@@ -33,6 +33,15 @@ datasets:
     res: 0.25
     vars: [sst]
     release: era5-sst-0p25-v2
+  era5_z500:
+    title: ERA5 500 hPa geopotential height, daily mean of 00 and 12 UTC (weather regimes)
+    source: gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3
+    licence: Copernicus licence (free, commercial use allowed, attribution)
+    years: [1995, 2025]
+    res: 1.0                 # selection of the 1 deg points (a smooth field, no averaging needed)
+    vars: [z500]
+    box: {lat_min: 20.0, lat_max: 80.0, lon_min: -90.0, lon_max: 40.0}  # Euro-Atlantic regime domain
+    release: era5-z500-1p0-v1
 # --------------------------------------------------------------------------------- forecasts
 # Published in boris-circeo/circeo-meteo-forecasts. Wind: deterministic runs and ensemble controls
 # at native resolution (0.25 deg) and native output steps; full ensembles (all members, native

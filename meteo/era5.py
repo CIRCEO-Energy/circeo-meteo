@@ -3,7 +3,9 @@
 * ``era5``       hourly 10 m wind, native 0.25 deg, one file per month (``era5_uv10_0p25_*``);
 * ``era5_waves`` hourly wave parameters on the native 0.5 deg wave grid (points selected, no
   averaging: directions cannot be averaged arithmetically), one file per month;
-* ``era5_sst``   daily-mean SST, 0.25 deg, one file per year.
+* ``era5_sst``   daily-mean SST, 0.25 deg, one file per year;
+* ``era5_z500``  daily-mean (00, 12 UTC) 500 hPa geopotential height, 1 deg, Euro-Atlantic regime
+  domain (its own box), one file per year.
 """
 from __future__ import annotations
 
@@ -23,7 +25,7 @@ ARCO = {  # storage name -> ARCO-ERA5 variable name
     "mdts": "mean_direction_of_total_swell", "mpts": "mean_period_of_total_swell",
     "sst": "sea_surface_temperature",
 }
-PREFIX = {"era5": "era5_uv10", "era5_waves": "era5_waves", "era5_sst": "era5_sst"}
+PREFIX = {"era5": "era5_uv10", "era5_waves": "era5_waves", "era5_sst": "era5_sst", "era5_z500": "era5_z500"}
 ATTR = ("Contains modified Copernicus Climate Change Service information; neither the European "
         "Commission nor ECMWF is responsible for any use of it.")
 
@@ -49,8 +51,29 @@ def _select(ds: xr.Dataset, res: float) -> xr.Dataset:
 def build_year(year: int, out: Path, months: list[int] | None = None,
                dataset: str = "era5") -> list[Path]:
     D = CFG["datasets"][dataset]
-    src = open_arco(D["vars"])
     files = []
+    if dataset == "era5_z500":
+        import numpy as np
+        ds = xr.open_zarr(CFG["datasets"]["era5"]["source"], chunks=None,
+                          storage_options={"token": "anon"})["geopotential"].sel(level=500)
+        B = D["box"]
+        lat = np.round(np.arange(B["lat_min"], B["lat_max"] + 1e-9, D["res"]), 4)
+        lon = np.round(np.arange(B["lon_min"], B["lon_max"] + 1e-9, D["res"]), 4)
+        parts = []
+        for m in months or range(1, 13):
+            t0 = pd.Timestamp(year, m, 1)
+            times = pd.date_range(t0, t0 + pd.offsets.MonthBegin(1) - pd.Timedelta(hours=1), freq="12h")
+            sub = standardise(ds.sel(time=times).to_dataset(name="z500"))
+            sub = sub.sel(lat=lat, lon=lon, method="nearest").load()
+            sub = sub.assign_coords(lat=lat.astype("float32"), lon=lon.astype("float32"))
+            parts.append((sub / 9.80665).resample(time="1D").mean().astype("float32"))
+            print(f"{dataset} {year}-{m:02d} ok", flush=True)
+        f = out / f"{PREFIX[dataset]}_{res_tag(D['res'])}_{year}.nc"
+        z = xr.concat(parts, "time")
+        z["z500"].attrs.update(units="gpm", long_name="500 hPa geopotential height (daily mean 00/12 UTC)")
+        return [write_nc(z, f, {"source": "ERA5 (ARCO-ERA5)", "licence": D["licence"],
+                                "attribution": ATTR})]
+    src = open_arco(D["vars"])
     if dataset == "era5_sst":
         parts = []
         for m in months or range(1, 13):

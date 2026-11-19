@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       dataset:
-        description: era5 | era5_waves | era5_sst | era5_z500 | cmems_phy_reanalysis | cmems_wav_reanalysis
+        description: era5 | era5_waves | era5_sst | era5_z500 | era5_synoptic | cmems_phy_reanalysis | cmems_wav_reanalysis
         required: true
       years:
         description: 'JSON list of years, e.g. [2015] or [2000,2001,2002]'

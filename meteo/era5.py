@@ -5,7 +5,8 @@
   averaging: directions cannot be averaged arithmetically), one file per month;
 * ``era5_sst``   daily-mean SST, 0.25 deg, one file per year;
 * ``era5_z500``  daily-mean (00, 12 UTC) 500 hPa geopotential height, 1 deg, Euro-Atlantic regime
-  domain (its own box), one file per year.
+  domain (its own box), one file per year;
+* ``era5_synoptic`` the same for a set of synoptic predictors (Z500, Z1000, MSLP, T850/700/500, T2m).
 """
 from __future__ import annotations
 
@@ -25,7 +26,7 @@ ARCO = {  # storage name -> ARCO-ERA5 variable name
     "mdts": "mean_direction_of_total_swell", "mpts": "mean_period_of_total_swell",
     "sst": "sea_surface_temperature",
 }
-PREFIX = {"era5": "era5_uv10", "era5_waves": "era5_waves", "era5_sst": "era5_sst", "era5_z500": "era5_z500"}
+PREFIX = {"era5": "era5_uv10", "era5_waves": "era5_waves", "era5_sst": "era5_sst", "era5_z500": "era5_z500", "era5_synoptic": "era5_synoptic"}
 ATTR = ("Contains modified Copernicus Climate Change Service information; neither the European "
         "Commission nor ECMWF is responsible for any use of it.")
 
@@ -72,7 +73,36 @@ def build_year(year: int, out: Path, months: list[int] | None = None,
         z = xr.concat(parts, "time")
         z["z500"].attrs.update(units="gpm", long_name="500 hPa geopotential height (daily mean 00/12 UTC)")
         return [write_nc(z, f, {"source": "ERA5 (ARCO-ERA5)", "licence": D["licence"],
-                                "attribution": ATTR})]
+                                "box": __import__("json").dumps(B), "attribution": ATTR})]
+    if dataset == "era5_synoptic":
+        import numpy as np
+        arco = xr.open_zarr(CFG["datasets"]["era5"]["source"], chunks=None, storage_options={"token": "anon"})
+        B = D["box"]
+        lat = np.round(np.arange(B["lat_min"], B["lat_max"] + 1e-9, D["res"]), 4)
+        lon = np.round(np.arange(B["lon_min"], B["lon_max"] + 1e-9, D["res"]), 4)
+        parts = []
+        for m in months or range(1, 13):
+            t0 = pd.Timestamp(year, m, 1)
+            times = pd.date_range(t0, t0 + pd.offsets.MonthBegin(1) - pd.Timedelta(hours=1), freq="12h")
+            month = {}
+            for name, (var, lev) in D["vars"].items():
+                da = arco[var] if lev is None else arco[var].sel(level=lev)
+                da = standardise(da.sel(time=times).to_dataset(name=name))[name]
+                da = da.sel(lat=lat, lon=lon, method="nearest").load()
+                da = da.assign_coords(lat=lat.astype("float32"), lon=lon.astype("float32"))
+                if name.startswith("z"):
+                    da = da / 9.80665
+                elif name == "mslp":
+                    da = da / 100.0
+                month[name] = da.drop_vars([c for c in ("level",) if c in da.coords])
+            parts.append(xr.Dataset(month).resample(time="1D").mean().astype("float32"))
+            print(f"{dataset} {year}-{m:02d} ok", flush=True)
+        z = xr.concat(parts, "time")
+        for name in z.data_vars:
+            z[name].attrs["units"] = "gpm" if name.startswith("z") else ("hPa" if name == "mslp" else "K")
+        f = out / f"{PREFIX[dataset]}_{res_tag(D['res'])}_{year}.nc"
+        return [write_nc(z, f, {"source": "ERA5 (ARCO-ERA5), daily mean of 00 and 12 UTC",
+                                "box": __import__("json").dumps(D["box"]), "licence": D["licence"], "attribution": ATTR})]
     src = open_arco(D["vars"])
     if dataset == "era5_sst":
         parts = []

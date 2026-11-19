@@ -23,7 +23,7 @@ from .common import manifest_entry
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("dataset", choices=["era5", "era5_waves", "era5_sst", "era5_z500", "gefs_reforecast",
+    ap.add_argument("dataset", choices=["era5", "era5_waves", "era5_sst", "era5_z500", "era5_synoptic", "gefs_reforecast",
                                         "gefs_oper", "gefs_ctl", "gfs_wave", "ecmwf_hres_wb2", "ecmwf_open",
                                         "cmems_phy_reanalysis", "cmems_phy_forecast",
                                         "cmems_wav_reanalysis"])

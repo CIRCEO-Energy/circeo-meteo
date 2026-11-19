@@ -42,6 +42,18 @@ datasets:
     vars: [z500]
     box: {lat_min: 20.0, lat_max: 80.0, lon_min: -90.0, lon_max: 40.0}  # Euro-Atlantic regime domain
     release: era5-z500-1p0-v1
+  era5_synoptic:
+    title: ERA5 synoptic predictors, daily mean of 00 and 12 UTC, 1 deg (statistical downscaling of the surface wind)
+    source: gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3
+    licence: Copernicus licence (free, commercial use allowed, attribution)
+    years: [1995, 2025]
+    res: 1.0
+    # name: [ARCO variable, pressure level or null]; z in gpm, t in K, mslp in hPa
+    vars: {z500: [geopotential, 500], z1000: [geopotential, 1000], mslp: [mean_sea_level_pressure, null],
+           t850: [temperature, 850], t700: [temperature, 700], t500: [temperature, 500],
+           t2m: [2m_temperature, null]}
+    box: {lat_min: 0.0, lat_max: 80.0, lon_min: -90.0, lon_max: 40.0}  # Euro-Atlantic + trade winds
+    release: era5-synoptic-1p0-v1
 # --------------------------------------------------------------------------------- forecasts
 # Published in boris-circeo/circeo-meteo-forecasts. Wind: deterministic runs and ensemble controls
 # at native resolution (0.25 deg) and native output steps; full ensembles (all members, native

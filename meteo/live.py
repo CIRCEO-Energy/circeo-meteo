@@ -3,7 +3,7 @@
 Finds the most recent 00/06/12/18 UTC run whose last wanted step is published, fetches u10/v10 on the archive box,
 regridded like the monthly archive, and writes
 
-    <out>/ecmwf_aifs_live_uv10_0p25_<YYYYMMDDHH>.nc   (dims init=1, lead, latitude, longitude; same as the archive)
+    <out>/ecmwf_aifs_live_uv10_0p25_<YYYYMMDDHH>.nc   (dims init=1, lead, lat, lon; same as the archive)
     <out>/latest.json                                 {"init": ..., "file": ..., "product": "aifs", ...}
 
 With --ens, also the latest AIFS-ENS 00/12 UTC run (0.5 deg, --members members): ecmwf_aifsens_live_uv10_0p5_<..>.nc
@@ -84,8 +84,8 @@ def main():
             with xr.open_dataset(f) as d:
                 meta[prod] = {"file": f.name, "init": str(d["init"].values[0])[:16] + "Z",
                               "leads_h": [int(d["lead"].values[0]), int(d["lead"].values[-1])],
-                              "box": [float(d["longitude"].min()), float(d["longitude"].max()),
-                                      float(d["latitude"].min()), float(d["latitude"].max())]}
+                              "box": [float(d["lon"].min()), float(d["lon"].max()),
+                                      float(d["lat"].min()), float(d["lat"].max())]}
     (out / "latest.json").write_text(json.dumps(meta, indent=1))
     print(json.dumps(meta), flush=True)
 

@@ -16,6 +16,9 @@ on:
       months:
         description: 'JSON list of months for monthly datasets (ignored by era5), e.g. [1,2,3,4,5,6,7,8,9,10,11,12]'
         default: '[1,2,3,4,5,6,7,8,9,10,11,12]'
+      max_parallel:
+        description: 'max concurrent jobs (ERDDAP sources such as ascat blacklist parallel clients: 1)'
+        default: '16'
       extra:
         description: 'extra CLI args (e.g. "--months 1" for an ERA5 smoke test, "--accept-licence", "--days 1")'
         default: ''
@@ -44,7 +47,7 @@ jobs:
     timeout-minutes: 350
     strategy:
       fail-fast: false
-      max-parallel: 16
+      max-parallel: ${{ fromJSON(inputs.max_parallel || '16') }}
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4

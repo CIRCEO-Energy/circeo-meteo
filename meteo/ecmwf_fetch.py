@@ -32,11 +32,12 @@ LAYOUTS = {  # product -> candidate (model dir, resol, stream, file type)
     "oper": [("ifs", "0p25", "oper", "fc"), ("", "0p4-beta", "oper", "fc")],
     "aifs": [("aifs-single", "0p25", "oper", "fc"), ("aifs", "0p25", "oper", "fc")],
     "enfo": [("ifs", "0p25", "enfo", "ef"), ("", "0p4-beta", "enfo", "ef")],
+    "aifs_ens": [("aifs-ens", "0p25", "enfo", "ef")],  # AIFS-ENS (operational since mid-2025)
     "wave": [("ifs", "0p25", "wave", "fc"), ("", "0p4-beta", "wave", "fc")],
 }
-WANTED = {"oper": ("u10", "v10"), "aifs": ("u10", "v10"), "enfo": ("u10", "v10"),
+WANTED = {"oper": ("u10", "v10"), "aifs": ("u10", "v10"), "enfo": ("u10", "v10"), "aifs_ens": ("u10", "v10"),
           "wave": ("swh", "mwd", "mwp", "pp1d")}
-PARAMS = {"oper": ("10u", "10v"), "aifs": ("10u", "10v"), "enfo": ("10u", "10v"),
+PARAMS = {"oper": ("10u", "10v"), "aifs": ("10u", "10v"), "enfo": ("10u", "10v"), "aifs_ens": ("10u", "10v"),
           "wave": ("swh", "mwd", "mwp", "pp1d")}
 
 
@@ -142,7 +143,7 @@ def _read_step(f: Path, product: str) -> xr.Dataset:
         if "latitude" not in ds.dims and "values" in ds.dims:
             ds = _gaussian_to_regular(ds)  # AIFS before 2025-02: reduced Gaussian grid N320
         ds = cut_box(standardise(ds), pad=1.0).load()
-        if product == "enfo":
+        if product in ("enfo", "aifs_ens"):
             if "number" in ds.dims:
                 ds = ds.rename(number="member")
             else:
@@ -151,7 +152,7 @@ def _read_step(f: Path, product: str) -> xr.Dataset:
             ds = ds.drop_vars("number", errors="ignore")
         out.append(ds.drop_vars([c for c in ("step", "valid_time", "time", "heightAboveGround",
                                              "surface", "meanSea") if c in ds.coords]))
-    return xr.concat(out, "member") if product == "enfo" and len(out) > 1 else out[0]
+    return xr.concat(out, "member") if product in ("enfo", "aifs_ens") and len(out) > 1 else out[0]
 
 
 def find_layout(product: str, day: pd.Timestamp, hh: int):

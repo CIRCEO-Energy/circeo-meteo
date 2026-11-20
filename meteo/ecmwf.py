@@ -5,7 +5,7 @@
   explicitly (``--accept-licence``): WB2 states that TIGGE-derived datasets are research-only;
   HRES comes from ECMWF's archive (historical data under CC-BY-4.0) but the file is the authority.
 * Open data: AWS mirror (s3://ecmwf-forecasts), CC-BY-4.0, read by ``ecmwf_fetch`` (parallel):
-  IFS ``oper`` (HRES / ENS control), IFS ``enfo`` (control + N perturbed) and ``aifs-single``.
+  IFS ``oper`` (HRES / ENS control), IFS ``enfo`` (control + N perturbed), ``aifs-single`` and ``aifs-ens``.
   only 10u/10v are fetched, from the .index files (HTTP byte ranges).
 
 Output: one file per month and product, dims (init, [member,] lead, lat, lon).

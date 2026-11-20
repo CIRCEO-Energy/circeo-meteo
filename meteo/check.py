@@ -30,11 +30,11 @@ RANGES = {"u10": (-75, 75), "v10": (-75, 75), "swh": (0, 25), "shww": (0, 25), "
 def expectations(name: str) -> dict:
     """Expected leads / members / runs per init day, from config.yaml and the file name."""
     D = CFG["datasets"]
-    m = re.match(r"ecmwf_(oper|aifs|enfo|wave)_", name)
+    m = re.match(r"ecmwf_(oper|aifs_ens|aifs|enfo|wave)_", name)
     if m:
         c = D["ecmwf_open"]["products"][m.group(1)]
         return {"leads": expand_steps(c["steps"]), "runs": len(c["runs"]),
-                "members": (c.get("members") or 0) + 1 if m.group(1) == "enfo" else None}
+                "members": (c.get("members") or 0) + 1 if m.group(1) in ("enfo", "aifs_ens") else None}
     for key in ("gefs_reforecast_syn", "gefs_reforecast", "gefs_oper", "gefs_ctl"):
         if name.startswith(key):
             c = D[key]

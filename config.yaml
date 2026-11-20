@@ -171,6 +171,7 @@ datasets:
       enfo: {res: 0.5, runs: [0], members: 50, steps: [[0, 144, 3], [150, 360, 6]],
              file: daily, release: "ecmwf-enfo-uv10-0p5-{year}"}
       aifs_ens: {res: 0.5, runs: [0], members: 50, steps: [[0, 240, 6]], file: daily,
+                 lat_min: 5.0,  # S9: the whole HORIZON NA+ zone (trade winds) in one file
                  release: "ecmwf-aifsens-uv10-0p5-{year}"}
       wave: {res: 0.5, runs: [0, 12], steps: [[0, 144, 3], [150, 240, 6]], file: monthly,
              release: ecmwf-wave-0p5-v2}

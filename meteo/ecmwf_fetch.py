@@ -32,7 +32,7 @@ LAYOUTS = {  # product -> candidate (model dir, resol, stream, file type)
     "oper": [("ifs", "0p25", "oper", "fc"), ("", "0p4-beta", "oper", "fc")],
     "aifs": [("aifs-single", "0p25", "oper", "fc"), ("aifs", "0p25", "oper", "fc")],
     "enfo": [("ifs", "0p25", "enfo", "ef"), ("", "0p4-beta", "enfo", "ef")],
-    "aifs_ens": [("aifs-ens", "0p25", "enfo", "ef")],  # AIFS-ENS (operational since mid-2025)
+    "aifs_ens": [("aifs-ens", "0p25", "enfo", "cf+pf"), ("aifs-ens", "0p25", "enfo", "ef")],  # AIFS-ENS (since mid-2025)
     "wave": [("ifs", "0p25", "wave", "fc"), ("", "0p4-beta", "wave", "fc")],
 }
 WANTED = {"oper": ("u10", "v10"), "aifs": ("u10", "v10"), "enfo": ("u10", "v10"), "aifs_ens": ("u10", "v10"),
@@ -41,8 +41,9 @@ PARAMS = {"oper": ("10u", "10v"), "aifs": ("10u", "10v"), "enfo": ("10u", "10v")
           "wave": ("swh", "mwd", "mwp", "pp1d")}
 
 
-def _url(day: pd.Timestamp, hh: int, layout, step: int) -> str:
-    model, resol, stream, ftype = layout
+def _url(day: pd.Timestamp, hh: int, layout, step: int, ftype: str | None = None) -> str:
+    model, resol, stream, ft = layout
+    ftype = ftype or ft.split("+")[0]  # "cf+pf": control and perturbed members in two files (AIFS-ENS)
     mdir = f"{model}/" if model else ""
     stamp = f"{day:%Y%m%d}{hh:02d}0000"
     return (f"{BASE}/{day:%Y%m%d}/{hh:02d}z/{mdir}{resol}/{stream}/"
@@ -170,12 +171,20 @@ def fetch_run(product: str, day: pd.Timestamp, hh: int, steps: list[int],
         raise FileNotFoundError(f"{product} {day:%Y-%m-%d} {hh:02d}z not on the AWS mirror")
     with tempfile.TemporaryDirectory() as td:
         def one(step):
-            url = _url(day, hh, lay, step)
-            idx = _index(url)
-            if idx is None:
-                return None
             f = Path(td) / f"s{step:03d}.grib2"
-            _get(url, _ranges(idx, members, PARAMS[product]), f)
+            parts = []
+            for ft in lay[3].split("+"):  # GRIB messages of several files concatenate into one file
+                url = _url(day, hh, lay, step, ft)
+                idx = _index(url)
+                if idx is None:
+                    return None
+                fp = Path(td) / f"s{step:03d}_{ft}.grib2"
+                _get(url, _ranges(idx, members, PARAMS[product]), fp)
+                parts.append(fp)
+            with open(f, "wb") as out:
+                for fp in parts:
+                    out.write(fp.read_bytes())
+                    fp.unlink()
             return step, f
         with cf.ThreadPoolExecutor(8) as ex:
             got = [g for g in ex.map(one, steps) if g is not None]

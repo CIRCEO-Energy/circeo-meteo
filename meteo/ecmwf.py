@@ -70,8 +70,11 @@ def build_open_month(year: int, month: int, out: Path,
     dates = [d for d in pd.date_range(first, first + pd.offsets.MonthEnd(0), freq="D")
              if not days or d.day in days]
     files = []
+    from .common import BOX
+    lat0 = BOX["lat_min"]
     for prod in products:
         cfg = P[prod]
+        BOX["lat_min"] = cfg.get("lat_min", lat0)  # in place (cut_box / target_grid read it); restored below
         steps = expand_steps(cfg["steps"])
         fam = "waves" if prod == "wave" else "uv10"
         stem = f"ecmwf_{prod}_{fam}_{res_tag(cfg['res'])}"
@@ -99,4 +102,5 @@ def build_open_month(year: int, month: int, out: Path,
             ds = xr.concat(parts, "init", join="outer")
             tag = f"{year}{month:02d}" if not days else f"{year}{month:02d}_d{days[0]:02d}"
             files.append(write_nc(ds, out / f"{stem}_{tag}.nc", attrs))
+    BOX["lat_min"] = lat0
     return files

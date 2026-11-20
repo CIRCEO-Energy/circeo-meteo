@@ -18,6 +18,7 @@ import xarray as xr
 from .common import CFG
 
 SRC = "https://cwcgom.aoml.noaa.gov/erddap/griddap/ASCAT_WINDS_METOP_{sat}_AOML.nc"
+# mirror (same data): https://upwell.pfeg.noaa.gov/erddap/griddap/noaa_aoml_8c7c_16cc_8cde (MetOp-B)
 VARS = ["WSPD", "uwnd", "vwnd", "Time", "Rain_Flag"]
 
 
@@ -26,6 +27,7 @@ def _get(url, f, tries=4):
         try:
             with requests.get(url, timeout=900, stream=True) as r:
                 if r.status_code == 404:
+                    print("404:", url[:160], "->", r.text[:400].replace("\n", " "), flush=True)
                     return False
                 r.raise_for_status()
                 with open(f, "wb") as fh:

@@ -17,8 +17,9 @@ import xarray as xr
 
 from .common import CFG
 
-SRC = "https://cwcgom.aoml.noaa.gov/erddap/griddap/ASCAT_WINDS_METOP_{sat}_AOML.nc"
-# mirror (same data): https://upwell.pfeg.noaa.gov/erddap/griddap/noaa_aoml_8c7c_16cc_8cde (MetOp-B)
+# AOML "ASCAT_WINDS_METOP_<sat>_AOML" products, served by the NOAA UAF ERDDAP (upwell)
+IDS = {"B": "noaa_aoml_8c7c_16cc_8cde"}
+SRC = "https://upwell.pfeg.noaa.gov/erddap/griddap/{id}.nc"
 VARS = ["WSPD", "uwnd", "vwnd", "Time", "Rain_Flag"]
 
 
@@ -52,7 +53,7 @@ def build_month(year: int, month: int, out: Path) -> list[Path]:
             q = ",".join(f"{v}_{pas}[({t0:%Y-%m-%d}T00:00:00Z):1:({t1:%Y-%m-%d}T23:59:59Z)]"
                          f"[({B['lat_min']}):1:({B['lat_max']})][({B['lon_min']}):1:({B['lon_max']})]" for v in VARS)
             tmp = out / f"_ascat_{sat}_{pas}.nc"
-            if not _get(SRC.format(sat=sat) + "?" + q, tmp):
+            if sat not in IDS or not _get(SRC.format(id=IDS[sat]) + "?" + q, tmp):
                 print(f"{sat}: not available", flush=True)
                 parts = []
                 break
@@ -74,7 +75,7 @@ def build_month(year: int, month: int, out: Path) -> list[Path]:
         if not parts:
             continue
         ds = xr.concat(parts, pd.Index(["asc", "desc"], name="pass"))
-        ds.attrs.update(source=SRC.format(sat=sat), licence=D["licence"], satellite=f"MetOp-{sat}",
+        ds.attrs.update(source=SRC.format(id=IDS[sat]), licence=D["licence"], satellite=f"MetOp-{sat}",
                         note="rain-flagged cells removed; t_obs = time of the overpass (UTC)")
         f = out / f"ascat_{sat.lower()}_0p25_{year}{month:02d}.nc"
         enc = {k: {"zlib": True, "complevel": 4} for k in ("ws", "u", "v", "t_obs")}

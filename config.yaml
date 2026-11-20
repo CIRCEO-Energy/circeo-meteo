@@ -66,9 +66,9 @@ datasets:
     release: climate-indices-v1
   ascat:
     title: ASCAT 10 m winds (MetOp-B, MetOp-C), daily 0.25 deg grids per pass with time of observation
-    source: NOAA AOML CoastWatch ERDDAP (ASCAT_WINDS_METOP_<sat>_AOML), EUMETSAT / NOAA NESDIS
+    source: NOAA AOML ASCAT_WINDS_METOP_B_AOML via the NOAA UAF ERDDAP (upwell), EUMETSAT / NOAA NESDIS
     licence: public (NOAA; EUMETSAT data policy, attribution)
-    satellites: [B, C]
+    satellites: [B]
     box: {lat_min: 0.125, lat_max: 79.875, lon_min: -99.875, lon_max: 19.875}
     release: ascat-uv10-0p25-v1
 # --------------------------------------------------------------------------------- forecasts

@@ -26,7 +26,10 @@ VARS = ["WSPD", "uwnd", "vwnd", "Time", "Rain_Flag"]
 def _get(url, f, tries=4):
     for k in range(tries):
         try:
-            with requests.get(url, timeout=900, stream=True) as r:
+            with requests.get(url, timeout=900, stream=True,
+                              headers={"User-Agent": "circeo-meteo/1.0 (research; github.com/boris-circeo/circeo-meteo)"}) as r:
+                if r.status_code in (403, 404):
+                    print(r.status_code, r.headers.get("server"), r.text[:300].replace("\n", " "), flush=True)
                 if r.status_code == 404:
                     print("404:", url[:160], "->", r.text[:400].replace("\n", " "), flush=True)
                     return False

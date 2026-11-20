@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from .common import CFG, regrid, write_nc
+from .common import BOX, CFG, regrid, write_nc
 from .ecmwf_fetch import _index, _url, fetch_run, find_layout
 
 ATTR = "Generated using ECMWF open data (CC-BY-4.0), latest run; real-time chain of CIRCEO HORIZON"
@@ -72,7 +72,9 @@ def main():
     ap.add_argument("--max-step", type=int, default=240)
     ap.add_argument("--ens", action="store_true")
     ap.add_argument("--members", type=int, default=50)
+    ap.add_argument("--lat-min", type=float, default=5.0, help="south edge (HORIZON NA+ zone: trade winds from 5N)")
     a = ap.parse_args()
+    BOX["lat_min"] = a.lat_min  # in place: cut_box / target_grid read this dict
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     meta = {"generated_utc": pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%MZ")}

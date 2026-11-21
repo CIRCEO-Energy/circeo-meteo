@@ -66,10 +66,20 @@ def latest_run(product: str, now: pd.Timestamp, max_step: int, cycles=(0, 6, 12,
     return None
 
 
+MIRRORS = ("https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com", "https://data.ecmwf.int/forecasts")
+
+
 def build(product: str, out: Path, max_step: int, members: int | None = None) -> Path | None:
+    from . import ecmwf_fetch
     cfg = CFG["datasets"]["ecmwf_open"]["products"][product]
     cycles = (0, 12) if product == "aifs_ens" else (0, 6, 12, 18)
-    found = latest_run(product, pd.Timestamp.utcnow().tz_localize(None), max_step, cycles)
+    found = None
+    for base in MIRRORS:  # AWS mirror first; ECMWF's own server when AWS throttles (persistent 503)
+        ecmwf_fetch.BASE = base
+        found = latest_run(product, pd.Timestamp.utcnow().tz_localize(None), max_step, cycles)
+        if found is not None:
+            print(f"{product}: source {base}", flush=True)
+            break
     if found is None:
         print(f"{product}: no complete run in the last cycles", flush=True)
         return None

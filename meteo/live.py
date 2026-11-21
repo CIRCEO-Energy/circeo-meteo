@@ -30,8 +30,12 @@ def _exists(url: str) -> bool:
     """Single probe of the .index sidecar, no retries (a run not yet published answers 404 or 5xx)."""
     import requests
     try:
-        return requests.get(url[:-6] + ".index", timeout=30).status_code == 200
-    except Exception:  # noqa: BLE001
+        r = requests.get(url[:-6] + ".index", timeout=30)
+        if r.status_code != 200:
+            print(f"  probe {r.status_code} {url.rsplit('/', 1)[-1]}", flush=True)
+        return r.status_code == 200
+    except Exception as exc:  # noqa: BLE001
+        print(f"  probe failed {url.rsplit('/', 1)[-1]}: {exc!r}"[:200], flush=True)
         return False
 
 

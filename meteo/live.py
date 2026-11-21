@@ -29,14 +29,16 @@ from .ecmwf_fetch import LAYOUTS, _url, fetch_run
 def _exists(url: str) -> bool:
     """Single probe of the .index sidecar, no retries (a run not yet published answers 404 or 5xx)."""
     import requests
-    try:
-        r = requests.get(url[:-6] + ".index", timeout=30)
-        if r.status_code != 200:
+    for k in range(4):  # 404: not published; 5xx (S3 "slow down"): short back-off, then give up
+        try:
+            r = requests.get(url[:-6] + ".index", timeout=30)
+            if r.status_code in (200, 403, 404):
+                return r.status_code == 200
             print(f"  probe {r.status_code} {url.rsplit('/', 1)[-1]}", flush=True)
-        return r.status_code == 200
-    except Exception as exc:  # noqa: BLE001
-        print(f"  probe failed {url.rsplit('/', 1)[-1]}: {exc!r}"[:200], flush=True)
-        return False
+        except Exception as exc:  # noqa: BLE001
+            print(f"  probe failed {url.rsplit('/', 1)[-1]}: {exc!r}"[:200], flush=True)
+        time.sleep(10 * (k + 1))
+    return False
 
 
 def find_layout(product, day, hh):

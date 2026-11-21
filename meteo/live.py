@@ -34,9 +34,12 @@ def latest_run(product: str, now: pd.Timestamp, max_step: int, cycles=(0, 6, 12,
     for _ in range(back):
         if t.hour in cycles:
             day, hh = t.normalize(), t.hour
-            lay = find_layout(product, day, hh)
-            if lay is not None and _index(_url(day, hh, lay, max_step)) is not None:
-                return day, hh
+            try:  # a run not yet published can answer with repeated 5xx (retries exhausted): treat as missing
+                lay = find_layout(product, day, hh)
+                if lay is not None and _index(_url(day, hh, lay, max_step)) is not None:
+                    return day, hh
+            except Exception as exc:  # noqa: BLE001
+                print(f"{product} {day:%Y-%m-%d} {hh:02d}z: not available ({type(exc).__name__})", flush=True)
         t -= pd.Timedelta(hours=6)
     return None
 

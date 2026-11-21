@@ -23,7 +23,23 @@ import pandas as pd
 import xarray as xr
 
 from .common import BOX, CFG, regrid, write_nc
-from .ecmwf_fetch import _index, _url, fetch_run, find_layout
+from .ecmwf_fetch import LAYOUTS, _url, fetch_run
+
+
+def _exists(url: str) -> bool:
+    """Single probe of the .index sidecar, no retries (a run not yet published answers 404 or 5xx)."""
+    import requests
+    try:
+        return requests.get(url[:-6] + ".index", timeout=30).status_code == 200
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def find_layout(product, day, hh):
+    for lay in LAYOUTS[product]:
+        if _exists(_url(day, hh, lay, 0)):
+            return lay
+    return None
 
 ATTR = "Generated using ECMWF open data (CC-BY-4.0), latest run; real-time chain of CIRCEO HORIZON"
 
@@ -36,7 +52,7 @@ def latest_run(product: str, now: pd.Timestamp, max_step: int, cycles=(0, 6, 12,
             day, hh = t.normalize(), t.hour
             try:  # a run not yet published can answer with repeated 5xx (retries exhausted): treat as missing
                 lay = find_layout(product, day, hh)
-                if lay is not None and _index(_url(day, hh, lay, max_step)) is not None:
+                if lay is not None and _exists(_url(day, hh, lay, max_step)):
                     return day, hh
             except Exception as exc:  # noqa: BLE001
                 print(f"{product} {day:%Y-%m-%d} {hh:02d}z: not available ({type(exc).__name__})", flush=True)

@@ -51,17 +51,18 @@ ATTR = "Generated using ECMWF open data (CC-BY-4.0), latest run; real-time chain
 
 
 def latest_run(product: str, now: pd.Timestamp, max_step: int, cycles=(0, 6, 12, 18), back: int = 6):
-    """(day, hh, layout) of the newest run whose step max_step is published, looking back `back` cycles."""
+    """(day, hh, mirror) of the newest run whose step max_step is published, looking back `back` cycles; for each
+    cycle every mirror is tried (one mirror throttling must not make an older run win)."""
+    from . import ecmwf_fetch
     t = now.floor("6h")
     for _ in range(back):
         if t.hour in cycles:
             day, hh = t.normalize(), t.hour
-            try:  # a run not yet published can answer with repeated 5xx (retries exhausted): treat as missing
+            for base in MIRRORS:
+                ecmwf_fetch.BASE = base
                 lay = find_layout(product, day, hh)
                 if lay is not None and _exists(_url(day, hh, lay, max_step)):
-                    return day, hh
-            except Exception as exc:  # noqa: BLE001
-                print(f"{product} {day:%Y-%m-%d} {hh:02d}z: not available ({type(exc).__name__})", flush=True)
+                    return day, hh, base
         t -= pd.Timedelta(hours=6)
     return None
 
@@ -73,13 +74,11 @@ def build(product: str, out: Path, max_step: int, members: int | None = None) ->
     from . import ecmwf_fetch
     cfg = CFG["datasets"]["ecmwf_open"]["products"][product]
     cycles = (0, 12) if product == "aifs_ens" else (0, 6, 12, 18)
-    found = None
-    for base in MIRRORS:  # AWS mirror first; ECMWF's own server when AWS throttles (persistent 503)
-        ecmwf_fetch.BASE = base
-        found = latest_run(product, pd.Timestamp.utcnow().tz_localize(None), max_step, cycles)
-        if found is not None:
-            print(f"{product}: source {base}", flush=True)
-            break
+    found = latest_run(product, pd.Timestamp.utcnow().tz_localize(None), max_step, cycles)
+    if found is not None:
+        ecmwf_fetch.BASE = found[2]
+        print(f"{product}: source {found[2]}", flush=True)
+        found = found[:2]
     if found is None:
         print(f"{product}: no complete run in the last cycles", flush=True)
         return None

@@ -1,7 +1,7 @@
 # TRUTH datasets (reanalyses: era5, era5_waves, era5_sst, cmems_phy_reanalysis,
 # cmems_wav_reanalysis): builds a range of years in parallel and uploads every file to the
 # dataset's Release in THIS repository (GITHUB_TOKEN). Forecasts are built by
-# boris-circeo/circeo-meteo-forecasts, which runs this repository's code.
+# CIRCEO-Energy/circeo-meteo-forecasts, which runs this repository's code.
 # Trigger: Actions tab > "build" > Run workflow (or `gh workflow run build.yml -f ...`).
 name: build
 on:

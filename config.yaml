@@ -72,7 +72,7 @@ datasets:
     box: {lat_min: 0.125, lat_max: 79.875, lon_min: -99.875, lon_max: 19.875}
     release: ascat-uv10-0p25-v1
 # --------------------------------------------------------------------------------- forecasts
-# Published in boris-circeo/circeo-meteo-forecasts. Wind: deterministic runs and ensemble controls
+# Published in CIRCEO-Energy/circeo-meteo-forecasts. Wind: deterministic runs and ensemble controls
 # at native resolution (0.25 deg) and native output steps; full ensembles (all members, native
 # steps) archived at 0.5 deg, their full-resolution statistics computed on the runners (verify).
 # "file: daily" products are written one file per day into one Release per year ({year}).

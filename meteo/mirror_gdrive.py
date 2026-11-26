@@ -7,7 +7,7 @@ few in parallel; the job stops cleanly after ``--max-minutes`` and the next run 
 Drive accepts about 750 GB of uploads per user and day: beyond, rclone errors and the next run
 resumes.
 
-    RCLONE_CONFIG=rclone.conf python -m meteo.mirror_gdrive --github boris-circeo/circeo-meteo
+    RCLONE_CONFIG=rclone.conf python -m meteo.mirror_gdrive --github CIRCEO-Energy/circeo-meteo
 """
 from __future__ import annotations
 
